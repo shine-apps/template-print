@@ -22,7 +22,7 @@
 | 程序形态 | 本地桌面应用 |
 | 打印机类型 | 普通办公（A4/A3）、标签/条码（热敏/热转印）、票据小票（58/80mm）、证卡/特种自定义尺寸，四类都支持 |
 | 使用规模 | 先单机单人；数据访问层预留多机/PostgreSQL 扩展能力 |
-| 设计元素 | 静态文本、参数占位文本、图片、条码/二维码、基础图形（直线/矩形/圆） |
+| 设计元素 | 静态文本、参数占位文本、图片（含条码/二维码图片）、基础图形（直线/矩形/椭圆） |
 | 排版辅助 | 对齐辅助线 + 网格吸附、图层顺序/锁定、元素旋转 |
 | 打印方式 | 静默直打与系统打印对话框两种，按模板配置，可临时切换 |
 | 参数类型 | 单行文本、多行文本、日期（默认今天）、数字/金额；不做下拉、流水号、图片参数 |
@@ -30,10 +30,13 @@
 | 打印机管理 | 枚举系统打印机并可设默认、打印前状态检查（可强制继续）、测试页 |
 | 模板管理 | 新建/编辑/复制/删除、分类分组、导入/导出模板文件 |
 
+> **范围决策（2026-09-23）**：不内置条码/二维码生成器。条码/二维码通过"上传图片元素"满足，设计器不集成专门的生成功能。
+
 ### 1.2 非目标（首版不做）
 
 - 多用户、权限、网络协同与云同步（仅保证仓储层可切换到 PostgreSQL）。
 - 自动流水号、下拉选择参数、图片参数。
+- 条码/二维码生成器（用图片上传替代）。
 - 打印审批、计费、统计报表。
 - macOS / Linux 适配（架构上不主动破坏，但只在 Windows 验收）。
 
@@ -52,7 +55,7 @@
 - Electron + electron-vite（main / preload / renderer 三端构建）
 - React 18 + TypeScript；Ant Design（表格/表单/抽屉等桌面管理台组件）；Zustand（设计器状态）
 - Konva + react-konva（设计画布）
-- JsBarcode（一维条码）、qrcode（二维码）
+- adm-zip（.tplx 模板包导入导出）
 - better-sqlite3 + Drizzle ORM（drizzle-kit 管理迁移）
 - electron-builder（Windows NSIS 安装包）
 - Vitest（单元/集成测试）
@@ -125,12 +128,8 @@ type TemplateElement =
       props: { paramId:string; fontFamily:string; fontSizeMm:number;
                bold:boolean; align:'left'|'center'|'right'; color:string;
                autoFit:boolean } }
-  | { id: string; type: 'image';   /* 同上几何字段 */
+  | { id: string; type: 'image';   /* 同上几何字段（条码/二维码以此元素承载） */
       props: { assetId:string; fit:'contain'|'cover'|'fill'; opacity:number } }
-  | { id: string; type: 'barcode'; /* 同上几何字段 */
-      props: { expr:string;            // 静态文本或 {{paramId}}
-               format:'CODE128'|'EAN13'|'QR'; showText:boolean;
-               eccLevel:'L'|'M'|'Q'|'H' } }
   | { id: string; type: 'shape';   /* 同上几何字段 */
       props: { shape:'line'|'rect'|'ellipse';
                strokeColor:string; strokeWidthMm:number; fillColor:string|null } };
@@ -235,9 +234,9 @@ type TemplateElement =
 
 ### 6.1 模板设计器（经典三栏）
 
-- **左栏**：上半元素库（文本/参数占位/图片/条码二维码/图形），下半图层面板（按 zIndex 列出全部元素，支持拖拽排序、显隐、锁定/解锁、删除）。
-- **中间**：顶部工具条（撤销/重做、纸张与方向、缩放、保存）；下方画布按纸张真实比例显示，毫米标尺、网格、对齐辅助线、吸附。
-- **右栏**：属性面板，随选中元素类型变化：几何（X/Y/宽高/旋转，毫米）、文本（字体/字号/加粗斜体/对齐/颜色/行高）、参数绑定、图片填充方式、条码格式、图形描边填充等。
+- **左栏**：上半元素库（文本/参数占位/图片/图形），下半图层面板（按 zIndex 列出全部元素，支持拖拽排序、显隐、锁定/解锁、删除）。
+- **中间**：顶部工具条（撤销/重做、模板名称与分类、纸张尺寸、缩放、网格开关、保存）；下方画布按纸张真实比例显示，网格、对齐辅助线、吸附。
+- **右栏**：属性面板，随选中元素类型变化：几何（X/Y/宽高/旋转，毫米）、文本（字体/字号/加粗斜体/对齐/颜色/行高）、参数绑定、图片填充方式、图形描边填充等。
 
 ### 6.2 模板列表页
 
@@ -273,14 +272,13 @@ type TemplateElement =
 - date：按 `date_format` 格式化；默认值 `today` 在打开填写页时解析为当天。
 - number：按 `number_format` 输出小数位与千分位。
 - 空值：`blank` 输出空串；`line` 输出与元素等宽的占位横线。
-- 条码 `expr` 中的 `{{paramId}}` 同样走求值；求值后内容不符合条码规范（如 EAN13 位数）在打印前报错。
 
 ### 7.2 打印 HTML 渲染
 
 - 独立离屏、隐藏的 `BrowserWindow`（`show:false`），加载本地 print-renderer 页面。
 - `@page { size: <w>mm <h>mm; margin: 0 }`；body 尺寸等于纸张；元素全部 `position:absolute`，坐标/尺寸用 mm。
 - `html, body { margin:0; -webkit-print-color-adjust: exact; print-color-adjust: exact }`，保证背景色与印章色输出。
-- 图片用本地 `file://` 路径或 dataURL；条码/二维码光栅化为高分辨率 PNG dataURL 嵌入。
+- 图片用本地 `file://` 路径或 dataURL（条码/二维码以图片元素形式提供，不做专门生成）。
 - `print-core/render-print-html.ts` 为纯函数（输入模板+参数，输出 HTML 字符串），无 Electron/DOM 依赖，可独立单测；预览页通过 iframe/容器加载同一输出。
 
 ### 7.3 单位与精度
@@ -309,7 +307,7 @@ type TemplateElement =
 |---|---|
 | 指定打印机不存在（改名/删除） | 弹窗重选打印机，历史记 failed |
 | 状态离线/异常 | 警告并可强制继续 |
-| 图片资源丢失/条码内容非法 | 打印前报错，不发任务 |
+| 图片资源丢失 | 打印前报错，不发任务 |
 | 静默直打回调失败 | 写 failed + error_message，提供重试 |
 | 用户在系统对话框取消 | 写 cancelled，不算失败 |
 | 渲染异常 | 捕获并提示具体元素 id，便于修正模板 |
@@ -339,8 +337,7 @@ template-print/
 ├─ print-core/                  ★ 纯逻辑核心（无 DOM / 无 Electron 依赖）
 │  ├─ template-model.ts         元素/纸张/参数 TS 类型 + zod 校验
 │  ├─ param-evaluator.ts        参数求值与格式化
-│  ├─ render-print-html.ts      模板 + 参数 → 打印 HTML
-│  └─ barcode.ts                条码/二维码光栅化
+│  └─ render-print-document.ts  模板 + 参数 → 打印 HTML
 ├─ db/
 │  ├─ schema.ts                 Drizzle 5 张表
 │  ├─ repositories/             所有 SQL 收敛于此
@@ -354,18 +351,18 @@ template-print/
   - 参数求值：日期格式、默认今天、数字千分位/小数位、空值空白/横线；
   - 毫米/微米/pt 换算；
   - `render-print-html` 输出快照（含各元素类型、旋转、超长文本 autoFit）；
-  - zod 模型校验：非法元素、缺字段、参数 key 冲突；
-  - 条码内容绑定与非法内容拦截。
-- **repositories 集成测试**：临时 SQLite 文件，覆盖模板 CRUD 级联、历史快照存取、搜索筛选。
+  - zod 模型校验：非法元素、缺字段、参数 key 冲突。
+- **repositories 集成测试**：临时 SQLite 文件，覆盖模板 CRUD 级联、历史快照存取、搜索筛选、.tplx 往返。
 - **服务层测试**：以仓储接口 mock 测试 dirty 保存决策、重打快照载入等业务规则。
-- **打印硬件（人工验收清单）**：静默直打/弹框；A4、标签自定义尺寸、58/80mm 小票；打印机离线/取消对话框；条码可扫描性；测试页尺寸核对。每项随版本人工验收并记录（硬件行为不纳入 CI 自动化）。
+- **打印硬件（人工验收清单）**：静默直打/弹框；A4、标签自定义尺寸、58/80mm 小票；打印机离线/取消对话框；测试页尺寸核对。每项随版本人工验收并记录（硬件行为不纳入 CI 自动化）。
 
 ## 10. 分期计划
 
 - **M1 核心闭环**
   数据库与迁移；模板 CRUD；三栏设计器（文本/参数/图片/图形、基础排版）；参数填写表单与实时预览；Chromium 直打/弹框；打印历史（快照、成品缩略图、按模板/时间/参数关键字的基础筛选、重打）；打印机枚举、设默认、测试页；Windows 安装包。
 - **M2 完善能力**
-  条码/二维码；元素旋转；辅助线与网格吸附；图层锁定/排序；模板分类与列表搜索；导入导出（.tplx）；PowerShell 打印机状态检查与打印前拦截。
+  元素旋转；辅助线与网格吸附；图层拖拽排序/锁定；模板名称与分类编辑；导入导出（.tplx）；PowerShell 打印机状态检查与打印前拦截。
+  - 条码/二维码生成器不做（2026-09-23 决策，由图片上传满足）。
 - **M3 打磨**
   历史多条件组合筛选增强；自定义纸张驱动引导；失败重试；历史清理；数据库自动备份；内置示例模板。
 

@@ -14,7 +14,7 @@
     "rebuild": "electron-builder install-app-deps",
     "bin:node": "powershell -ExecutionPolicy Bypass -File ./scripts/switch-sqlite.ps1 node",
     "bin:electron": "powershell -ExecutionPolicy Bypass -File ./scripts/switch-sqlite.ps1 electron",
-    "dist": "electron-vite build && electron-builder --win nsis"
+    "dist": "powershell -ExecutionPolicy Bypass -File ./scripts/dist.ps1"
   },
   "dependencies": {
     "@ant-design/icons": "^5.5.1",

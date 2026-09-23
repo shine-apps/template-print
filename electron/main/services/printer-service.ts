@@ -6,46 +6,44 @@ import { createTemplate, createElement } from '../../../print-core/template-mode
 import type { PrintService } from './print-service'
 import type { Services } from '../ipc'
 
-type RawPrinter = { PrinterStatus?: string; WorkflowStatus?: string }
+const VALID: readonly PrinterRuntimeStatus[] = ['ready', 'offline', 'paper-out', 'error', 'unknown']
 
 /**
  * 通过 PowerShell Get-Printer 查询单台打印机运行时状态。
- * 任何错误（进程失败/超时/无输出/JSON 解析失败）一律回落 unknown，绝不抛出。
+ * 映射在 PowerShell 内完成（ConvertTo-Json 会把枚举序列化为数字，无法在 node 侧匹配），
+ * 标准输出只允许是五态字符串之一；任何异常一律回落 unknown，绝不抛出。
  */
 function queryPrinterStatus(name: string, timeoutMs = 3000): Promise<PrinterRuntimeStatus> {
   return new Promise((resolve) => {
     // 单引号转义防注入；参数数组执行，不经 shell 拼接
     const safe = name.replace(/'/g, "''")
+    // 单行 switch（case 间靠 } 分隔，不得在 case 之间插分号）
+    const command =
+      `$p = Get-Printer -Name '${safe}' -ErrorAction SilentlyContinue; ` +
+      `if ($null -eq $p) { 'unknown' } else { switch -Regex ($p.PrinterStatus.ToString()) { ` +
+      `'^(Normal|Processing|Waiting|Busy|IOActive|Initialization|WarmingUp)$' { 'ready'; break } ` +
+      `'^Offline$' { 'offline'; break } ` +
+      `'^(PaperOut|PaperJam|NoToner|TonerLow|ManualFeed)$' { 'paper-out'; break } ` +
+      `'^(Error|PaperProblem|NotAvailable|UserIntervention|OutOfMemory|ServerUnknown|Paused|PendingDeletion|PagePunt)$' { 'error'; break } ` +
+      `default { 'unknown' } } }`
     const child = execFile(
       'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-Command',
-        `Get-Printer -Name '${safe}' | Select-Object PrinterStatus,WorkflowStatus | ConvertTo-Json -Compress`],
+      ['-NoProfile', '-NonInteractive', '-Command', command],
       { timeout: timeoutMs, windowsHide: true }
     )
     let out = ''
     child.stdout?.on('data', (d: string) => { out += d })
     child.on('error', () => resolve('unknown'))
     child.on('close', () => {
-      try {
-        const json = out.trim()
-        if (!json) return resolve('unknown')
-        const parsed: RawPrinter | RawPrinter[] = JSON.parse(json)
-        const s = Array.isArray(parsed) ? parsed[0] : parsed
-        const raw = `${s?.PrinterStatus ?? ''} ${s?.WorkflowStatus ?? ''}`.toLowerCase()
-        if (raw.includes('offline')) resolve('offline')
-        else if (raw.includes('paper') || raw.includes('toner')) resolve('paper-out')
-        else if (raw.includes('normal') || raw.includes('idle') || raw.includes('printing')) resolve('ready')
-        else if (raw.trim() === '') resolve('unknown')
-        else resolve('error')
-      } catch {
-        resolve('unknown')
-      }
+      const s = out.trim()
+      resolve((VALID as readonly string[]).includes(s) ? (s as PrinterRuntimeStatus) : 'unknown')
     })
   })
 }
 
 export class PrinterService {
-  private statusCache = new Map<string, { at: number; s: PrinterRuntimeStatus }>()
+  /** 缓存进行中/已完成的查询 Promise，60 秒内的并发与重复调用共享同一次 PowerShell 查询 */
+  private statusCache = new Map<string, { at: number; p: Promise<PrinterRuntimeStatus> }>()
 
   constructor(
     private dataDir: string,
@@ -66,12 +64,12 @@ export class PrinterService {
     return this.print.submit(buildTestPageJob(name))
   }
 
-  async getStatus(name: string): Promise<PrinterRuntimeStatus> {
+  getStatus(name: string): Promise<PrinterRuntimeStatus> {
     const hit = this.statusCache.get(name)
-    if (hit && Date.now() - hit.at < 60_000) return hit.s
-    const s = await queryPrinterStatus(name)
-    this.statusCache.set(name, { at: Date.now(), s })
-    return s
+    if (hit && Date.now() - hit.at < 60_000) return hit.p
+    const p = queryPrinterStatus(name)
+    this.statusCache.set(name, { at: Date.now(), p })
+    return p
   }
 
   async getStatusMap(names: string[]): Promise<Record<string, PrinterRuntimeStatus>> {

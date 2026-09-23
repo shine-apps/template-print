@@ -21,7 +21,9 @@ export function ElementLibrary(): JSX.Element {
       <div style={{ opacity: 0.7, fontSize: 12, margin: '4px 0' }}>添加元素</div>
       <Space direction="vertical" style={{ width: '100%' }}>
         <Button block onClick={() => add('text')}>文本</Button>
-        <Button block disabled title="在右侧“参数”区新建后自动插入占位">参数占位</Button>
+        <div style={{ opacity: 0.5, fontSize: 12, margin: '6px 0' }}>
+          参数占位请在右栏“添加参数”，会自动放到画布上
+        </div>
         <Button block disabled>图片（Task 16）</Button>
         <Button block onClick={() => add('shape', { shape: 'line' })}>直线</Button>
         <Button block onClick={() => add('shape', { shape: 'rect' })}>矩形</Button>

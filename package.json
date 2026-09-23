@@ -12,6 +12,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "rebuild": "electron-builder install-app-deps",
+    "bin:node": "powershell -ExecutionPolicy Bypass -File ./scripts/switch-sqlite.ps1 node",
+    "bin:electron": "powershell -ExecutionPolicy Bypass -File ./scripts/switch-sqlite.ps1 electron",
     "dist": "electron-vite build && electron-builder --win nsis"
   },
   "dependencies": {

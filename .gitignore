@@ -7,6 +7,9 @@ release/
 # 脑暴可视化伴侣本地产物
 .superpowers/
 
+# 原生 ABI 切换脚本缓存
+.native-bin/
+
 # 本地数据库与资源
 *.db
 *.db-journal

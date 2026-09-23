@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { join, extname } from 'node:path'
-import { mkdirSync, copyFileSync, rmSync, readFileSync } from 'node:fs'
+import { mkdirSync, copyFileSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { IPC } from '../../../shared/ipc-contract'
 import { AssetRepository } from '../../../db/repositories/asset-repo'
@@ -14,9 +14,8 @@ const MIME: Record<string, string> = {
   '.bmp': 'image/bmp'
 }
 
-/** 从 PNG/JPEG/GIF/BMP 文件头读取像素尺寸，无第三方依赖。 */
-function readImageSize(path: string): { widthPx: number; heightPx: number } {
-  const buf = readFileSync(path)
+/** 从 PNG/JPEG/GIF/BMP 缓冲头读取像素尺寸，无第三方依赖。 */
+export function readImageSizeFromBuffer(buf: Buffer): { widthPx: number; heightPx: number } {
   if (buf.subarray(0, 8).toString('hex') === '89504e470d0a1a0a') {
     return { widthPx: buf.readUInt32BE(16), heightPx: buf.readUInt32BE(20) }
   }
@@ -32,13 +31,19 @@ function readImageSize(path: string): { widthPx: number; heightPx: number } {
       o += 2 + len
     }
   }
-  if (buf.subarray(0, 6).toString('ascii') === 'GIF87a' || buf.subarray(0, 6).toString('ascii') === 'GIF89a') {
+  const ascii6 = buf.subarray(0, 6).toString('ascii')
+  if (ascii6 === 'GIF87a' || ascii6 === 'GIF89a') {
     return { widthPx: buf.readUInt16LE(6), heightPx: buf.readUInt16LE(8) }
   }
-  if (buf.subarray(0, 2).toString('ascii') === 'BM') {
+  if (ascii6.slice(0, 2) === 'BM') {
     return { widthPx: buf.readInt32LE(18), heightPx: Math.abs(buf.readInt32LE(22)) }
   }
   throw new Error('不支持的图片格式（仅 png/jpg/gif/bmp）')
+}
+
+/** 从 PNG/JPEG/GIF/BMP 文件头读取像素尺寸，无第三方依赖。 */
+function readImageSize(path: string): { widthPx: number; heightPx: number } {
+  return readImageSizeFromBuffer(readFileSync(path))
 }
 
 export class AssetService {
@@ -73,6 +78,36 @@ export class AssetService {
     const rec = this.repo.get(assetId)
     if (!rec) throw new Error(`资产不存在: ${assetId}`)
     return join(this.dataDir, rec.filePath)
+  }
+
+  /** 相对数据目录路径 → 绝对路径（供导出读取原始文件） */
+  absPathOf(rel: string): string {
+    return join(this.dataDir, rel)
+  }
+
+  /** 从缓冲导入资产（.tplx 导入用），assetId 保留包内原值；调用方须先确认 id 不存在 */
+  async importBuffer(input: {
+    templateId: string
+    assetId: string
+    buffer: Buffer
+    ext: string
+    originalName: string
+  }): Promise<void> {
+    const mime = MIME[input.ext] ?? 'application/octet-stream'
+    const relPath = join('assets', input.templateId, `${input.assetId}${input.ext}`)
+    mkdirSync(join(this.dataDir, 'assets', input.templateId), { recursive: true })
+    writeFileSync(join(this.dataDir, relPath), input.buffer)
+    const { widthPx, heightPx } = readImageSizeFromBuffer(input.buffer)
+    this.repo.insert({
+      id: input.assetId,
+      templateId: input.templateId,
+      filePath: relPath,
+      originalName: input.originalName,
+      mime,
+      sizeBytes: input.buffer.length,
+      widthPx,
+      heightPx
+    })
   }
 
   fileUrl(assetId: string): string {

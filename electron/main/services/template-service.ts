@@ -1,10 +1,14 @@
-import { ipcMain } from 'electron'
+import { dialog, ipcMain } from 'electron'
+import { writeFileSync, readFileSync } from 'node:fs'
+import { basename, extname } from 'node:path'
+import AdmZip from 'adm-zip'
 import { IPC, type NewTemplateInput } from '../../../shared/ipc-contract'
 import {
   TemplateDocumentSchema,
   createTemplate,
   localId,
-  type TemplateDocument
+  type TemplateDocument,
+  type TemplateElement
 } from '../../../print-core/template-model'
 import { TemplateRepository } from '../../../db/repositories/template-repo'
 import type { AssetService } from './asset-service'
@@ -66,6 +70,57 @@ export class TemplateService {
     this.assets.purgeForTemplate(id)
     this.repo.remove(id)
   }
+
+  /** 导出 .tplx（zip）：根 template.json + assets/<assetId><.ext> */
+  async exportToFile(id: string, targetPath: string): Promise<void> {
+    const doc = this.repo.getById(id)
+    if (!doc) throw new Error('模板不存在')
+    const zip = new AdmZip()
+    zip.addFile('template.json', Buffer.from(JSON.stringify(doc, null, 2), 'utf-8'))
+    for (const a of this.assets.repo.listByTemplate(id)) {
+      zip.addFile(`assets/${basename(a.filePath)}`, readFileSync(this.assets.absPathOf(a.filePath)))
+    }
+    writeFileSync(targetPath, zip.toBuffer())
+  }
+
+  /** 导入 .tplx：zod 校验 → 新 id/名称追加"导入" → 解压图片资产（保留原 assetId） */
+  async importFromFile(sourcePath: string): Promise<TemplateDocument> {
+    const zip = new AdmZip(sourcePath)
+    const entry = zip.getEntry('template.json')
+    if (!entry) throw new Error('不是有效的 .tplx 文件（缺少 template.json）')
+    const parsed = TemplateDocumentSchema.parse(JSON.parse(entry.getData().toString('utf-8')))
+
+    const now = Date.now()
+    const newDoc: TemplateDocument = TemplateDocumentSchema.parse({
+      ...structuredClone(parsed),
+      id: localId('tpl'),
+      name: `${parsed.name} 导入`,
+      isBuiltin: false,
+      createdAt: now,
+      updatedAt: now
+    })
+    this.repo.upsert(newDoc)
+
+    const imageEls = newDoc.content.elements.filter(
+      (e): e is Extract<TemplateElement, { type: 'image' }> => e.type === 'image'
+    )
+    for (const el of imageEls) {
+      // 已存在同 assetId 的资产则跳过（repo.insert 主键冲突会抛错）
+      if (this.assets.repo.get(el.props.assetId)) continue
+      const fileEntry = zip.getEntries().find(
+        (e) => e.entryName.startsWith('assets/') && e.entryName.includes(el.props.assetId)
+      )
+      if (!fileEntry) continue
+      await this.assets.importBuffer({
+        templateId: newDoc.id,
+        assetId: el.props.assetId,
+        buffer: fileEntry.getData(),
+        ext: extname(fileEntry.entryName) || '.png',
+        originalName: fileEntry.name
+      })
+    }
+    return newDoc
+  }
 }
 
 export function registerTemplateHandlers(deps: Services): void {
@@ -82,4 +137,30 @@ export function registerTemplateHandlers(deps: Services): void {
   ipcMain.handle(IPC.templatesDuplicate, (_e, id: string) => svc.duplicate(id))
   ipcMain.removeHandler(IPC.templatesDelete)
   ipcMain.handle(IPC.templatesDelete, (_e, id: string) => svc.remove(id))
+
+  ipcMain.removeHandler(IPC.templatesExport)
+  ipcMain.handle(IPC.templatesExport, async (_e, id: string) => {
+    const doc = await svc.get(id)
+    if (!doc) throw new Error('模板不存在')
+    const r = await dialog.showSaveDialog({
+      title: '导出模板',
+      defaultPath: `${doc.name}.tplx`,
+      filters: [{ name: '模板包', extensions: ['tplx'] }]
+    })
+    if (r.canceled || !r.filePath) return { canceled: true }
+    await svc.exportToFile(id, r.filePath)
+    return { canceled: false, path: r.filePath }
+  })
+
+  ipcMain.removeHandler(IPC.templatesImport)
+  ipcMain.handle(IPC.templatesImport, async () => {
+    const r = await dialog.showOpenDialog({
+      title: '导入模板',
+      filters: [{ name: '模板包', extensions: ['tplx'] }],
+      properties: ['openFile']
+    })
+    if (r.canceled || !r.filePaths[0]) return { canceled: true }
+    const created = await svc.importFromFile(r.filePaths[0])
+    return { canceled: false, id: created.id }
+  })
 }

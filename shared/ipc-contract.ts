@@ -36,6 +36,8 @@ export const IPC = {
   templatesSave: 'templates:save',
   templatesDuplicate: 'templates:duplicate',
   templatesDelete: 'templates:delete',
+  templatesExport: 'templates:export',
+  templatesImport: 'templates:import',
   assetsImport: 'assets:import',
   assetsDataUrl: 'assets:data-url',
   assetsListUrls: 'assets:list-urls',
@@ -57,6 +59,8 @@ export interface Api {
     save(doc: TemplateDocument): Promise<void>
     duplicate(id: string): Promise<TemplateDocument>
     delete(id: string): Promise<void>
+    export(id: string): Promise<{ canceled: boolean; path?: string }>
+    importTplx(): Promise<{ canceled: boolean; id?: string }>
   }
   assets: {
     import(input: { templateId: string; sourcePath: string }): Promise<{ assetId: string }>

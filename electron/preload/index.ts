@@ -8,7 +8,9 @@ const api = {
     create: (input: unknown) => ipcRenderer.invoke(IPC.templatesCreate, input),
     save: (doc: unknown) => ipcRenderer.invoke(IPC.templatesSave, doc),
     duplicate: (id: string) => ipcRenderer.invoke(IPC.templatesDuplicate, id),
-    delete: (id: string) => ipcRenderer.invoke(IPC.templatesDelete, id)
+    delete: (id: string) => ipcRenderer.invoke(IPC.templatesDelete, id),
+    export: (id: string) => ipcRenderer.invoke(IPC.templatesExport, id),
+    importTplx: () => ipcRenderer.invoke(IPC.templatesImport)
   },
   assets: {
     import: (input: unknown) => ipcRenderer.invoke(IPC.assetsImport, input),

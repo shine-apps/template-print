@@ -96,6 +96,10 @@ export function TemplatesPage(): JSX.Element {
         <Input.Search placeholder="搜索模板名称" allowClear style={{ width: 220 }} value={keyword}
           onChange={(e) => setKeyword(e.target.value)} />
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>新建模板</Button>
+        <Button onClick={async () => {
+          const r = await api.templates.importTplx()
+          if (!r.canceled) { message.success('模板已导入'); void refresh() }
+        }}>导入</Button>
       </Space>
 
       {docs.length === 0
@@ -121,6 +125,7 @@ export function TemplatesPage(): JSX.Element {
                     <a key="edit" onClick={() => nav(`/designer/${d.id}`)}>编辑</a>,
                     <Dropdown key="more" menu={{ items: [
                       { key: 'dup', label: '复制', onClick: () => onDuplicate(d) },
+                      { key: 'export', label: '导出', onClick: () => api.templates.export(d.id) },
                       { key: 'ren', label: '重命名', onClick: () => { setRenaming(d); setRenameVal(d.name) } },
                       { type: 'divider' },
                       {

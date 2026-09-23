@@ -1,0 +1,51 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import { useDesignerStore } from '../../src/renderer/store/designer-store'
+import { createTemplate, createElement, createParamDef } from '../../print-core/template-model'
+
+function reset(): void {
+  const tpl = createTemplate('t1', '测试', { widthMm: 210, heightMm: 297 })
+  useDesignerStore.getState().load(tpl, 'template')
+}
+
+describe('designer store', () => {
+  beforeEach(reset)
+
+  it('addElement 后元素进入文档并被选中', () => {
+    const el = createElement('text', { text: 'A' }, { x: 1, y: 1, w: 20, h: 8 })
+    useDesignerStore.getState().addElement(el)
+    const { doc, selectedId } = useDesignerStore.getState()
+    expect(doc.content.elements.length).toBe(1)
+    expect(selectedId).toBe(el.id)
+  })
+
+  it('updateGeometry 提交后可撤销/重做', () => {
+    const el = createElement('text', {}, { x: 0, y: 0, w: 10, h: 5 })
+    useDesignerStore.getState().addElement(el)
+    useDesignerStore.getState().commit()
+    useDesignerStore.getState().updateGeometry(el.id, { x: 50 })
+    useDesignerStore.getState().commit()
+    expect(useDesignerStore.getState().doc.content.elements[0].x).toBe(50)
+    useDesignerStore.getState().undo()
+    expect(useDesignerStore.getState().doc.content.elements[0].x).toBe(0)
+    useDesignerStore.getState().redo()
+    expect(useDesignerStore.getState().doc.content.elements[0].x).toBe(50)
+  })
+
+  it('removeElement 同时清理引用了该参数的 param 定义（由调用方传入联动逻辑）——store 只删元素', () => {
+    const p = createParamDef({ key: 'name', label: '姓名', type: 'text' })
+    const { doc } = useDesignerStore.getState()
+    doc.params.push(p)
+    const el = createElement('param', { paramId: p.id }, { x: 0, y: 0, w: 20, h: 6 })
+    useDesignerStore.getState().addElement(el)
+    useDesignerStore.getState().commit()
+    useDesignerStore.getState().removeElement(el.id)
+    useDesignerStore.getState().commit()
+    expect(useDesignerStore.getState().doc.content.elements.length).toBe(0)
+  })
+
+  it('addOrUpdateParam 新增参数定义', () => {
+    const p = createParamDef({ key: 'date', label: '日期', type: 'date' })
+    useDesignerStore.getState().addOrUpdateParam(p)
+    expect(useDesignerStore.getState().doc.params[0].key).toBe('date')
+  })
+})

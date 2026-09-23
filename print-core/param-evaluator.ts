@@ -78,7 +78,7 @@ export function evaluateParams(
   return out
 }
 
-/** 替换条码/文本表达式中的 {{key}}（M1 文本渲染不使用，预留给 M2，先放工具函数并测） */
+/** 替换表达式中的 {{key}}（通用工具，保留供未来场景使用） */
 export function interpolate(expr: string, values: Record<string, string>): string {
   return expr.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, key: string) => values[key] ?? '')
 }

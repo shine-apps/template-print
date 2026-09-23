@@ -10,7 +10,7 @@ export function PropertyPanel({ onCommitted }: { onCommitted: () => void }): JSX
   const updateProps = useDesignerStore((s) => s.updateProps)
   const el = doc.content.elements.find((e) => e.id === selectedId)
 
-  function geo(patch: Partial<{ x: number; y: number; w: number; h: number; locked: boolean }>): void {
+  function geo(patch: Partial<{ x: number; y: number; w: number; h: number; locked: boolean; rotation: number }>): void {
     if (el) { updateGeometry(el.id, patch); onCommitted() }
   }
   function props(patch: Record<string, unknown>): void {
@@ -35,6 +35,9 @@ export function PropertyPanel({ onCommitted }: { onCommitted: () => void }): JSX
               onChange={(v) => geo({ w: Math.max(1, v ?? 1) })} />
             高 <InputNumber size="small" style={{ width: 80 }} value={Number(el.h.toFixed(1))} addonAfter="mm"
               onChange={(v) => geo({ h: Math.max(1, v ?? 1) })} />
+            旋转 <InputNumber size="small" style={{ width: 80 }} min={-180} max={180} step={15}
+              value={Number(el.rotation.toFixed(1))} addonAfter="°"
+              onChange={(v) => geo({ rotation: v ?? 0 })} />
           </Space>
           <Space>
             锁定 <Switch size="small" checked={el.locked} onChange={(v) => geo({ locked: v })} />

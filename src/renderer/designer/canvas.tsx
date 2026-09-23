@@ -28,7 +28,7 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls }: {
   scale: number
   selected: boolean
   onSelect: () => void
-  onChange: (patch: Partial<Pick<TemplateElement, 'x' | 'y' | 'w' | 'h'>>) => void
+  onChange: (patch: Partial<Pick<TemplateElement, 'x' | 'y' | 'w' | 'h' | 'rotation'>>) => void
   assetUrls: Record<string, string>
 }): JSX.Element {
   const shapeRef = useRef<Konva.Node>(null)
@@ -60,17 +60,17 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls }: {
     onTransformEnd: () => {
       const node = shapeRef.current
       if (!node) return
-      // Group 包装元素只回传坐标
-      if (node.className === 'Group') {
-        onChange({ x: node.x() / mmToPxAt96(1) / scale, y: node.y() / mmToPxAt96(1) / scale })
-        return
-      }
-      onChange({
+      const patch: Partial<Pick<TemplateElement, 'x' | 'y' | 'w' | 'h' | 'rotation'>> = {
         x: node.x() / mmToPxAt96(1) / scale,
-        y: node.y() / mmToPxAt96(1) / scale,
-        w: Math.max(1, node.width() * node.scaleX() / mmToPxAt96(1) / scale),
-        h: Math.max(1, node.height() * node.scaleY() / mmToPxAt96(1) / scale)
-      })
+        y: node.y() / mmToPxAt96(1) / scale
+      }
+      // Group 包装元素（直线/椭圆）只回传坐标，尺寸不回传
+      if (node.className !== 'Group') {
+        patch.w = Math.max(1, node.width() * node.scaleX() / mmToPxAt96(1) / scale)
+        patch.h = Math.max(1, node.height() * node.scaleY() / mmToPxAt96(1) / scale)
+      }
+      patch.rotation = Math.round(node.rotation() * 10) / 10
+      onChange(patch)
       node.scaleX(1); node.scaleY(1)
     }
   }
@@ -132,7 +132,7 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls }: {
     <>
       {body}
       {selected && (
-        <Transformer ref={trRef} rotateEnabled={false}
+        <Transformer ref={trRef}
           enabledAnchors={isGroupWrapped(el) ? [] : undefined}
           boundBoxFunc={(oldBox, newBox) =>
             newBox.width < 4 || newBox.height < 4 ? oldBox : newBox} />

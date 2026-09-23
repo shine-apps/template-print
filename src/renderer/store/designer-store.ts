@@ -26,6 +26,7 @@ interface DesignerState {
   removeElement(id: string): void
   updateGeometry(id: string, patch: Partial<Pick<Geometry, 'x' | 'y' | 'w' | 'h' | 'rotation' | 'locked' | 'zIndex'>>): void
   updateProps(id: string, patch: Record<string, unknown>): void
+  reorderLayer(id: string, beforeId: string | null): void
   addOrUpdateParam(p: ParamDef): void
   removeParam(id: string): void
   markSaved(): void
@@ -111,6 +112,17 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
     get().mutate((d) => {
       const el = d.content.elements.find((e) => e.id === id)
       if (el) Object.assign(el.props, patch)
+    })
+  },
+  reorderLayer(id, beforeId) {
+    get().mutate((d) => {
+      const sorted = [...d.content.elements].sort((a, b) => a.zIndex - b.zIndex)
+      const from = sorted.findIndex((e) => e.id === id)
+      if (from < 0) return
+      const [item] = sorted.splice(from, 1)
+      const to = beforeId === null ? sorted.length : sorted.findIndex((e) => e.id === beforeId)
+      sorted.splice(to < 0 ? sorted.length : to, 0, item)
+      sorted.forEach((e, i) => { e.zIndex = i })
     })
   },
   addOrUpdateParam(p) {

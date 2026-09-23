@@ -11,14 +11,32 @@ export function LayersPanel(): JSX.Element {
   const select = useDesignerStore((s) => s.select)
   const updateGeometry = useDesignerStore((s) => s.updateGeometry)
   const removeElement = useDesignerStore((s) => s.removeElement)
+  const reorderLayer = useDesignerStore((s) => s.reorderLayer)
   const commit = useDesignerStore((s) => s.commit)
 
   const els = [...doc.content.elements].sort((a, b) => b.zIndex - a.zIndex)
   return (
-    <div style={{ marginTop: 16 }}>
+    <div style={{ marginTop: 16 }}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault()
+        const id = e.dataTransfer.getData('text/el-id')
+        if (id) { reorderLayer(id, null); commit() }
+      }}>
       <div style={{ opacity: 0.7, fontSize: 12, marginBottom: 4 }}>图层（{els.length}）</div>
       {els.map((el) => (
         <div key={el.id}
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData('text/el-id', el.id)
+            e.dataTransfer.effectAllowed = 'move'
+          }}
+          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+          onDrop={(e) => {
+            e.preventDefault(); e.stopPropagation()
+            const id = e.dataTransfer.getData('text/el-id')
+            if (id && id !== el.id) { reorderLayer(id, el.id); commit() }
+          }}
           onClick={() => select(el.id)}
           style={{
             background: el.id === selectedId ? '#2563eb' : '#374151',

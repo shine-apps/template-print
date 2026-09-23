@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Space, Spin, Input, message } from 'antd'
+import { Button, Space, Spin, Input, Select, message } from 'antd'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useDesignerStore } from '../store/designer-store'
@@ -14,6 +14,7 @@ export function DesignerPage(): JSX.Element {
   const { id } = useParams()
   const nav = useNavigate()
   const [loading, setLoading] = useState(true)
+  const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([])
   const doc = useDesignerStore((s) => s.doc)
   const mode = useDesignerStore((s) => s.mode)
   const dirty = useDesignerStore((s) => s.dirty)
@@ -39,6 +40,14 @@ export function DesignerPage(): JSX.Element {
     // 不做卸载清理：工作副本由 print 页消费或由 clearDraft() 显式清理
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  useEffect(() => {
+    void api.templates.list({}).then((ts) => {
+      setCategoryOptions(
+        [...new Set(ts.map((t) => t.category).filter(Boolean))].map((c) => ({ value: c, label: c }))
+      )
+    })
+  }, [])
 
   async function save(): Promise<void> {
     try {
@@ -69,8 +78,26 @@ export function DesignerPage(): JSX.Element {
         <Space style={{ background: '#fff', padding: 8, borderBottom: '1px solid #eee' }}>
           <Button onClick={() => { useDesignerStore.getState().undo() }}>撤销</Button>
           <Button onClick={() => { useDesignerStore.getState().redo() }}>重做</Button>
-          <Input variant="borderless" value={doc.name} disabled style={{ width: 160 }} />
+          <Input variant="borderless" style={{ width: 140 }} value={doc.name}
+            onChange={(e) => useDesignerStore.getState().mutate((d) => { d.name = e.target.value })} />
           <span style={{ color: '#888' }}>{doc.paper.widthMm}×{doc.paper.heightMm}mm</span>
+          <Select style={{ width: 130 }} placeholder="分类" allowClear showSearch
+            value={doc.category || undefined}
+            onChange={(v) => useDesignerStore.getState().mutate((d) => { d.category = v ?? '' })}
+            options={categoryOptions}
+            dropdownRender={(menu) => (<>
+              {menu}
+              <div style={{ padding: 4, borderTop: '1px solid #eee' }}>
+                <Input size="small" placeholder="输入新分类后回车"
+                  onPressEnter={(e) => {
+                    const v = (e.target as HTMLInputElement).value.trim()
+                    if (v && !categoryOptions.some((c) => c.value === v)) {
+                      setCategoryOptions((o) => [...o, { value: v, label: v }])
+                    }
+                    useDesignerStore.getState().mutate((d) => { d.category = v })
+                  }} />
+              </div>
+            </>)} />
           {dirty && <span style={{ color: '#fa8c16' }}>未保存</span>}
           {mode === 'print-session'
             ? <Button type="primary" onClick={backToPrint}>完成，返回打印</Button>

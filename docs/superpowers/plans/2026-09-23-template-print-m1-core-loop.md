@@ -13,7 +13,15 @@
 - 包管理器用 Bun；命令同时给出 npm 等价形式。
 - 所有几何单位内部一律毫米（mm），Chromium 纸张用微米（μm），字号内部存 mm、界面显示 pt。
 - 每个任务结束都提交；提交命令中如本机 git 身份未配置，统一追加 `-c user.name=dev -c user.email=dev@local`。
-- 本计划只含 M1；条码/二维码、旋转、吸附、导入导出、打印机状态查询属于 M2，不在本计划。
+- 本计划只含 M1；条码/二维码、旋转、吸附、导入导出、打印机状态检查属于 M2，不在本计划。
+- 测试一律用 Node 运行：`npx vitest run [路径]`（Windows 版 Bun 不支持 better-sqlite3 等原生模块）。
+- tsc 调用本地编译器：`node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json`（本机 npx 会误拉到全局 tsc 2.0.4）。
+
+### 实施勘误（Task 2–5 落地后更新，后续任务以此为准）
+
+1. `createParamDef(...)` 生成的参数定义 **id 等于 key**（即 `id: input.key`）。参数元素的 `paramId` 即参数 key；参数值始终按 key 存取。模板复制时 id 映射保持恒等即可。**编辑已有参数时 key 不可修改**（Task 15 的编辑弹窗中 key 输入框 disabled，避免画布引用悬空）。
+2. `renderPrintDocument(doc, values, assetUrls)` 第三参为**扁平**的 `Record<assetId, url>`，不是 `{ assetUrls }` 包装。
+3. 日期格式对外仍用 `yyyy/dd/d` 小写 token，`formatDate` 内部已做归一化，调用方无需处理。
 
 ---
 
@@ -3483,24 +3491,27 @@ export function ParamManager({ onCommitted }: { onCommitted: () => void }): JSX.
         ]} />
 
       {editing && (
-        <ParamEditModal def={editing} onCancel={() => setEditing(null)} onOk={upsert} />
+        <ParamEditModal def={editing} isNew={!doc.params.some((p) => p.id === editing.id)}
+          onCancel={() => setEditing(null)} onOk={upsert} />
       )}
     </div>
   )
 }
 
-function ParamEditModal({ def, onOk, onCancel }: {
+function ParamEditModal({ def, isNew, onOk, onCancel }: {
   def: ParamDef
+  isNew: boolean
   onOk: (v: Partial<ParamDef> & { key: string; label: string; type: ParamType }) => void
   onCancel: () => void
 }): JSX.Element {
   const [f, setF] = useState<ParamDef>(def)
   return (
-    <Modal open title={def.label === '新参数' ? '添加参数' : '编辑参数'} onCancel={onCancel}
+    <Modal open title={isNew ? '添加参数' : '编辑参数'} onCancel={onCancel}
       onOk={() => onOk(f)} okText="确定" cancelText="取消">
       <Form layout="vertical" size="small">
-        <Form.Item label="字段标识（英文 key）" required>
-          <Input value={f.key} onChange={(e) => setF({ ...f, key: e.target.value })} />
+        <Form.Item label="字段标识（英文 key，保存后不可改）" required>
+          <Input value={f.key} disabled={!isNew}
+            onChange={(e) => setF({ ...f, key: e.target.value })} />
         </Form.Item>
         <Form.Item label="显示名称" required>
           <Input value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} />
@@ -3774,7 +3785,7 @@ export function PrintPage(): JSX.Element {
     [doc, values]
   )
   const previewHtml = useMemo(
-    () => (doc ? renderPrintDocument(doc, evaluated, { assetUrls }) : ''),
+    () => (doc ? renderPrintDocument(doc, evaluated, assetUrls) : ''),
     [doc, evaluated, assetUrls]
   )
 
@@ -4145,7 +4156,7 @@ export class PrintService {
     const values = evaluateParams(doc.params, paramValues)
     if (values.__errors?.length) throw new Error(`必填项未填：${values.__errors.join(', ')}`)
 
-    const html = renderPrintDocument(doc, values, { assetUrls: this.assetFileUrls(doc) })
+    const html = renderPrintDocument(doc, values, this.assetFileUrls(doc))
     const jobId = localId('job')
     const htmlPath = join(this.dataDir, 'print-tmp', `${jobId}.html`)
     writeFileSync(htmlPath, html, 'utf-8')
@@ -4293,7 +4304,7 @@ it('端到端：模板+用户输入 → 完整打印 HTML', () => {
     createElement('param', { paramId: p.id }, { x: 5, y: 20, w: 70, h: 6 })
   )
   const values = evaluateParams(tpl.params, { name: '李四' })
-  const html = renderPrintDocument(tpl, values, { assetUrls: {} })
+  const html = renderPrintDocument(tpl, values, {})
   expect(html).toContain('size: 80mm 200mm')
   expect(html).toContain('李四')
 })

@@ -15,23 +15,23 @@
     "dist": "electron-vite build && electron-builder --win nsis"
   },
   "dependencies": {
-    "better-sqlite3": "^11.3.0",
-    "drizzle-orm": "^0.33.0",
+    "@ant-design/icons": "^5.5.1",
+    "antd": "^5.21.0",
+    "better-sqlite3": "^12.11.1",
     "dayjs": "^1.11.13",
+    "drizzle-orm": "^0.33.0",
+    "konva": "^9.3.16",
     "nanoid": "^3.3.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.2",
-    "antd": "^5.21.0",
-    "@ant-design/icons": "^5.5.1",
-    "zustand": "^4.5.5",
-    "konva": "^9.3.16",
     "react-konva": "^18.2.10",
-    "zod": "^3.23.8"
+    "react-router-dom": "^6.26.2",
+    "zod": "^3.23.8",
+    "zustand": "^4.5.5"
   },
   "devDependencies": {
-    "@types/node": "^20.16.5",
     "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.16.5",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

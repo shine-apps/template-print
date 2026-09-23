@@ -43,7 +43,7 @@ app.whenReady().then(() => {
   const templates = new TemplateService(new TemplateRepository(client.db), assets)
   const history = new HistoryService(p.dataDir, new JobRepository(client.db))
   const print = new PrintService(p.dataDir, assets, history)
-  const printers = new PrinterService(p.dataDir)
+  const printers = new PrinterService(p.dataDir, print)
   const services: Services = { assets, templates, history, print, printers }
   const win = createWindow()
   registerIpc(win, services)

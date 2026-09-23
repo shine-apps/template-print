@@ -1,4 +1,4 @@
-import type { TemplateDocument } from '../../../print-core/template-model'
+import type { TemplateDocument } from '../../print-core/template-model'
 
 interface DraftSlot {
   /** 工作副本模板（调整版式返回 / 历史快照重打时使用） */

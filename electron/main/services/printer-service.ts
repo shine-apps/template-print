@@ -1,11 +1,52 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { IPC, type PrinterInfoDto, type SubmitPrintInput } from '../../../shared/ipc-contract'
+import { execFile } from 'node:child_process'
+import { IPC, type PrinterInfoDto, type PrinterRuntimeStatus, type SubmitPrintInput } from '../../../shared/ipc-contract'
 import { loadSettings, saveSettings, type AppSettings } from '../settings'
 import { createTemplate, createElement } from '../../../print-core/template-model'
 import type { PrintService } from './print-service'
 import type { Services } from '../ipc'
 
+type RawPrinter = { PrinterStatus?: string; WorkflowStatus?: string }
+
+/**
+ * 通过 PowerShell Get-Printer 查询单台打印机运行时状态。
+ * 任何错误（进程失败/超时/无输出/JSON 解析失败）一律回落 unknown，绝不抛出。
+ */
+function queryPrinterStatus(name: string, timeoutMs = 3000): Promise<PrinterRuntimeStatus> {
+  return new Promise((resolve) => {
+    // 单引号转义防注入；参数数组执行，不经 shell 拼接
+    const safe = name.replace(/'/g, "''")
+    const child = execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command',
+        `Get-Printer -Name '${safe}' | Select-Object PrinterStatus,WorkflowStatus | ConvertTo-Json -Compress`],
+      { timeout: timeoutMs, windowsHide: true }
+    )
+    let out = ''
+    child.stdout?.on('data', (d: string) => { out += d })
+    child.on('error', () => resolve('unknown'))
+    child.on('close', () => {
+      try {
+        const json = out.trim()
+        if (!json) return resolve('unknown')
+        const parsed: RawPrinter | RawPrinter[] = JSON.parse(json)
+        const s = Array.isArray(parsed) ? parsed[0] : parsed
+        const raw = `${s?.PrinterStatus ?? ''} ${s?.WorkflowStatus ?? ''}`.toLowerCase()
+        if (raw.includes('offline')) resolve('offline')
+        else if (raw.includes('paper') || raw.includes('toner')) resolve('paper-out')
+        else if (raw.includes('normal') || raw.includes('idle') || raw.includes('printing')) resolve('ready')
+        else if (raw.trim() === '') resolve('unknown')
+        else resolve('error')
+      } catch {
+        resolve('unknown')
+      }
+    })
+  })
+}
+
 export class PrinterService {
+  private statusCache = new Map<string, { at: number; s: PrinterRuntimeStatus }>()
+
   constructor(
     private dataDir: string,
     private print: PrintService
@@ -23,6 +64,20 @@ export class PrinterService {
   }
   testPage(name: string) {
     return this.print.submit(buildTestPageJob(name))
+  }
+
+  async getStatus(name: string): Promise<PrinterRuntimeStatus> {
+    const hit = this.statusCache.get(name)
+    if (hit && Date.now() - hit.at < 60_000) return hit.s
+    const s = await queryPrinterStatus(name)
+    this.statusCache.set(name, { at: Date.now(), s })
+    return s
+  }
+
+  async getStatusMap(names: string[]): Promise<Record<string, PrinterRuntimeStatus>> {
+    const out: Record<string, PrinterRuntimeStatus> = {}
+    await Promise.all(names.map(async (n) => { out[n] = await this.getStatus(n) }))
+    return out
   }
 }
 
@@ -53,4 +108,6 @@ export function registerPrinterHandlers(deps: Services, win: BrowserWindow): voi
   ipcMain.handle(IPC.printersGetDefault, () => svc.getDefault())
   ipcMain.handle(IPC.printersSetDefault, (_e, name: string) => svc.setDefault(name))
   ipcMain.handle(IPC.printersTestPage, (_e, name: string) => svc.testPage(name))
+  ipcMain.removeHandler(IPC.printersStatus)
+  ipcMain.handle(IPC.printersStatus, (_e, names: string[]) => svc.getStatusMap(names))
 }

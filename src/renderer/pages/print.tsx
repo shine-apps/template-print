@@ -144,6 +144,25 @@ export function PrintPage(): JSX.Element {
     if (!doc) return
     if (errors.length > 0) { message.warning(`请填写必填项：${errors.join(', ')}`); return }
     if (!printerName) { message.warning('请选择打印机'); return }
+
+    // 打印前检查打印机运行时状态：异常态需用户确认强制打印；ready/unknown 直接继续
+    const statusMap = await api.printers.status([printerName])
+    const st = statusMap[printerName]
+    if (st === 'offline' || st === 'error' || st === 'paper-out') {
+      const labelMap: Record<string, string> = { offline: '离线', error: '异常', 'paper-out': '缺纸/耗材' }
+      const force = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: `打印机状态：${labelMap[st]}`,
+          content: '打印机当前状态可能无法完成打印。仍要继续发送任务吗？',
+          okText: '强制打印',
+          cancelText: '返回',
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false)
+        })
+      })
+      if (!force) return
+    }
+
     const working: TemplateDocument = { ...doc, printMode: mode, printerName }
     let res
     try {

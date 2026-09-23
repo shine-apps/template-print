@@ -6,6 +6,9 @@ export interface PrinterInfoDto {
   isDefault: boolean
 }
 
+/** 打印机运行时状态（PowerShell Get-Printer 查询结果的归一化五态） */
+export type PrinterRuntimeStatus = 'ready' | 'offline' | 'paper-out' | 'error' | 'unknown'
+
 export interface NewTemplateInput {
   name: string
   category?: string
@@ -45,6 +48,7 @@ export const IPC = {
   printersGetDefault: 'printers:get-default',
   printersSetDefault: 'printers:set-default',
   printersTestPage: 'printers:test-page',
+  printersStatus: 'printers:status',
   printSubmit: 'print:submit',
   jobsList: 'jobs:list',
   jobsGet: 'jobs:get',
@@ -72,6 +76,7 @@ export interface Api {
     getDefault(): Promise<string | null>
     setDefault(name: string): Promise<void>
     testPage(name: string): Promise<void>
+    status(names: string[]): Promise<Record<string, PrinterRuntimeStatus>>
   }
   print: {
     submit(input: SubmitPrintInput): Promise<SubmitPrintResult>

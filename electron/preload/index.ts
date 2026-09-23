@@ -21,7 +21,8 @@ const api = {
     list: () => ipcRenderer.invoke(IPC.printersList),
     getDefault: () => ipcRenderer.invoke(IPC.printersGetDefault),
     setDefault: (name: string) => ipcRenderer.invoke(IPC.printersSetDefault, name),
-    testPage: (name: string) => ipcRenderer.invoke(IPC.printersTestPage, name)
+    testPage: (name: string) => ipcRenderer.invoke(IPC.printersTestPage, name),
+    status: (names: string[]) => ipcRenderer.invoke(IPC.printersStatus, names)
   },
   print: {
     submit: (input: unknown) => ipcRenderer.invoke(IPC.printSubmit, input)

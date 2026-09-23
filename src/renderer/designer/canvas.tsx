@@ -4,6 +4,7 @@ import type Konva from 'konva'
 import { mmToPxAt96 } from '../../../shared/units'
 import { useDesignerStore } from '../store/designer-store'
 import type { TemplateElement } from '../../../print-core/template-model'
+import { snapPosition, type MovingRect } from './guides'
 
 function useLoadedImage(url: string | undefined): HTMLImageElement | undefined {
   const [img, setImg] = useState<HTMLImageElement | undefined>()
@@ -23,13 +24,15 @@ function isGroupWrapped(el: TemplateElement): boolean {
   return el.type === 'shape' && el.props.shape !== 'rect'
 }
 
-function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls }: {
+function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls, onDragMove, onDragEnd }: {
   el: TemplateElement
   scale: number
   selected: boolean
   onSelect: () => void
   onChange: (patch: Partial<Pick<TemplateElement, 'x' | 'y' | 'w' | 'h' | 'rotation'>>) => void
   assetUrls: Record<string, string>
+  onDragMove: (el: TemplateElement, node: Konva.Node) => void
+  onDragEnd: (el: TemplateElement, node: Konva.Node) => void
 }): JSX.Element {
   const shapeRef = useRef<Konva.Node>(null)
   const trRef = useRef<Konva.Transformer>(null)
@@ -54,9 +57,8 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls }: {
     draggable: !el.locked,
     onClick: onSelect,
     onTap: onSelect,
-    onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
-      onChange({ x: e.target.x() / mmToPxAt96(1) / scale, y: e.target.y() / mmToPxAt96(1) / scale })
-    },
+    onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => onDragMove(el, e.target),
+    onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => onDragEnd(el, e.target),
     onTransformEnd: () => {
       const node = shapeRef.current
       if (!node) return
@@ -150,6 +152,9 @@ export function DesignerCanvas(): JSX.Element {
   const removeElement = useDesignerStore((s) => s.removeElement)
   const [scale, setScale] = useState(1)
   const [assetUrls, setAssetUrls] = useState<Record<string, string>>({})
+  const [gridOn, setGridOn] = useState(() => localStorage.getItem('tp-grid') === '1')
+  const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] })
+  useEffect(() => { localStorage.setItem('tp-grid', gridOn ? '1' : '0') }, [gridOn])
   const imageCount = doc.content.elements.filter((e) => e.type === 'image').length
   useEffect(() => {
     void window.api.assets.listUrls(doc.id).then(setAssetUrls).catch(() => setAssetUrls({}))
@@ -158,6 +163,52 @@ export function DesignerCanvas(): JSX.Element {
   const pw = MM(doc.paper.widthMm, scale)
   const ph = MM(doc.paper.heightMm, scale)
   const sorted = [...doc.content.elements].sort((a, b) => a.zIndex - b.zIndex)
+
+  const gridLines: JSX.Element[] = []
+  if (gridOn) {
+    for (let i = 0; i < Math.max(0, Math.floor(doc.paper.widthMm / 10) - 1); i++) {
+      const gx = MM((i + 1) * 10, scale)
+      gridLines.push(
+        <Line key={`gv${i}`} listening={false}
+          points={[gx, 0, gx, ph]} stroke="#d9d9d9" strokeWidth={1} />
+      )
+    }
+    for (let i = 0; i < Math.max(0, Math.floor(doc.paper.heightMm / 10) - 1); i++) {
+      const gy = MM((i + 1) * 10, scale)
+      gridLines.push(
+        <Line key={`gh${i}`} listening={false}
+          points={[0, gy, pw, gy]} stroke="#d9d9d9" strokeWidth={1} />
+      )
+    }
+  }
+
+  function handleDragMove(el: TemplateElement, node: Konva.Node): void {
+    const moving: MovingRect = {
+      x: node.x() / mmToPxAt96(1) / scale,
+      y: node.y() / mmToPxAt96(1) / scale,
+      w: el.w,
+      h: el.h
+    }
+    const paper = { id: '__paper__', x: 0, y: 0, w: doc.paper.widthMm, h: doc.paper.heightMm }
+    const other = doc.content.elements
+      .filter((e) => e.id !== el.id)
+      .map((e) => ({ id: e.id, x: e.x, y: e.y, w: e.w, h: e.h }))
+    const r = snapPosition(
+      moving, paper, other, 3,
+      gridOn ? { enabled: true, sizeMm: 10 } : { enabled: false, sizeMm: 10 }
+    )
+    if (Math.abs(r.x - moving.x) > 0.001) node.x(MM(r.x, scale))
+    if (Math.abs(r.y - moving.y) > 0.001) node.y(MM(r.y, scale))
+    setGuides({ v: r.guidesV, h: r.guidesH })
+  }
+
+  function handleDragEnd(el: TemplateElement, node: Konva.Node): void {
+    updateGeometry(el.id, {
+      x: node.x() / mmToPxAt96(1) / scale,
+      y: node.y() / mmToPxAt96(1) / scale
+    })
+    setGuides({ v: [], h: [] })
+  }
 
   return (
     <div tabIndex={0}
@@ -171,16 +222,30 @@ export function DesignerCanvas(): JSX.Element {
         <button onClick={() => setScale((s) => Math.max(0.2, s - 0.1))}>－</button>
         <span style={{ margin: '0 8px' }}>{Math.round(scale * 100)}%</span>
         <button onClick={() => setScale((s) => Math.min(3, s + 0.1))}>＋</button>
+        <label style={{ marginLeft: 12 }}>
+          <input type="checkbox" checked={gridOn} onChange={(e) => setGridOn(e.target.checked)} /> 网格(10mm)
+        </label>
       </div>
       <Stage width={Math.max(pw + 80, 400)} height={Math.max(ph + 80, 400)}
         onMouseDown={(e) => { if (e.target === e.target.getStage()) select(null) }}>
         <Layer offsetX={-40} offsetY={-40}>
           <Rect x={0} y={0} width={pw} height={ph} fill="#ffffff" shadowBlur={6} shadowOpacity={0.2} />
+          {gridLines}
           {sorted.map((el) => (
             <ElementShape key={el.id} el={el} scale={scale} selected={el.id === selectedId}
               onSelect={() => select(el.id)}
               onChange={(patch) => updateGeometry(el.id, patch)}
-              assetUrls={assetUrls} />
+              assetUrls={assetUrls}
+              onDragMove={handleDragMove}
+              onDragEnd={handleDragEnd} />
+          ))}
+          {guides.v.map((gx) => (
+            <Line key={`av${gx}`} listening={false}
+              points={[MM(gx, scale), 0, MM(gx, scale), ph]} stroke="#ff4d4f" strokeWidth={1} />
+          ))}
+          {guides.h.map((gy) => (
+            <Line key={`ah${gy}`} listening={false}
+              points={[0, MM(gy, scale), pw, MM(gy, scale)]} stroke="#ff4d4f" strokeWidth={1} />
           ))}
         </Layer>
       </Stage>

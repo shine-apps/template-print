@@ -1,0 +1,45 @@
+{
+  "name": "template-print",
+  "version": "0.1.0",
+  "private": true,
+  "description": "可视化模板设计与打印桌面程序",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "rebuild": "electron-builder install-app-deps",
+    "dist": "electron-vite build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "drizzle-orm": "^0.33.0",
+    "dayjs": "^1.11.13",
+    "nanoid": "^3.3.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2",
+    "antd": "^5.21.0",
+    "@ant-design/icons": "^5.5.1",
+    "zustand": "^4.5.5",
+    "konva": "^9.3.16",
+    "react-konva": "^18.2.10",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^31.4.0",
+    "electron-builder": "^25.0.5",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.6",
+    "vitest": "^2.1.1"
+  }
+}

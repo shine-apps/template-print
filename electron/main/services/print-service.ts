@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { IPC, type SubmitPrintInput, type SubmitPrintResult } from '../../../shared/ipc-contract'
 import { renderPrintDocument } from '../../../print-core/render-print-document'
 import { evaluateParams } from '../../../print-core/param-evaluator'
-import { mmToMicron } from '../../../shared/units'
+import { mmToMicron, mmToPxAt96 } from '../../../shared/units'
 import { TemplateDocumentSchema, localId, type TemplateDocument } from '../../../print-core/template-model'
 import type { AssetService } from './asset-service'
 import type { HistoryService } from './history-service'
@@ -86,8 +86,16 @@ export class PrintService {
     const htmlPath = join(this.dataDir, 'print-tmp', `${jobId}.html`)
     writeFileSync(htmlPath, html, 'utf-8')
 
+    // 离屏窗口内容区按纸张 96dpi 物理像素设置，保证抓帧得到完整纸张
+    // （Windows 窗口最小客户区约 136px，给一个下限）。
+    const pageW = Math.max(160, Math.round(mmToPxAt96(doc.paper.widthMm)))
+    const pageH = Math.max(160, Math.round(mmToPxAt96(doc.paper.heightMm)))
+
     const win = new BrowserWindow({
       show: false,
+      width: pageW,
+      height: pageH,
+      useContentSize: true,
       webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, offscreen: false }
     })
 
@@ -101,9 +109,9 @@ export class PrintService {
       // 补强 A：图片就绪后再等一个绘制节拍，避免隐藏窗口首帧未完成就抓缩略图
       await waitFirstPaint(300)
 
-      // 缩略图（打印前抓帧）
+      // 缩略图（打印前抓帧）：只截纸张区域，宽度统一缩到 240px
       try {
-        const image = await win.webContents.capturePage()
+        const image = await win.webContents.capturePage({ x: 0, y: 0, width: pageW, height: pageH })
         thumbPath = join('thumbs', `${jobId}.png`)
         writeFileSync(join(this.dataDir, thumbPath), image.resize({ width: 240 }).toPNG())
       } catch {

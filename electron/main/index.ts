@@ -6,8 +6,12 @@ import { runMigrations } from '../../db/migrate'
 import { registerIpc, type Services } from './ipc'
 import { TemplateRepository } from '../../db/repositories/template-repo'
 import { AssetRepository } from '../../db/repositories/asset-repo'
+import { JobRepository } from '../../db/repositories/job-repo'
 import { AssetService } from './services/asset-service'
 import { TemplateService } from './services/template-service'
+import { HistoryService } from './services/history-service'
+import { PrintService } from './services/print-service'
+import { PrinterService } from './services/printer-service'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -37,7 +41,10 @@ app.whenReady().then(() => {
   runMigrations(client)
   const assets = new AssetService(p.dataDir, new AssetRepository(client.db))
   const templates = new TemplateService(new TemplateRepository(client.db), assets)
-  const services: Services = { assets, templates }
+  const history = new HistoryService(p.dataDir, new JobRepository(client.db))
+  const print = new PrintService(p.dataDir, assets, history)
+  const printers = new PrinterService(p.dataDir)
+  const services: Services = { assets, templates, history, print, printers }
   const win = createWindow()
   registerIpc(win, services)
   app.on('activate', () => {

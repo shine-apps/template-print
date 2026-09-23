@@ -3,6 +3,11 @@ import { join } from 'node:path'
 import { paths } from './app-paths'
 import { createDb } from '../../db/client'
 import { runMigrations } from '../../db/migrate'
+import { registerIpc, type Services } from './ipc'
+import { TemplateRepository } from '../../db/repositories/template-repo'
+import { AssetRepository } from '../../db/repositories/asset-repo'
+import { AssetService } from './services/asset-service'
+import { TemplateService } from './services/template-service'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -30,10 +35,11 @@ app.whenReady().then(() => {
   const p = paths()
   const client = createDb(p.dbFile)
   runMigrations(client)
-  // Task 9 起把装配好的服务传入 registerIpc
-  // registerIpc(createWindow(), {})
+  const assets = new AssetService(p.dataDir, new AssetRepository(client.db))
+  const templates = new TemplateService(new TemplateRepository(client.db), assets)
+  const services: Services = { assets, templates }
   const win = createWindow()
-  void win
+  registerIpc(win, services)
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

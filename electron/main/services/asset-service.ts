@@ -102,7 +102,6 @@ export class AssetService {
 }
 
 export function registerAssetHandlers(deps: Services): void {
-  if (!deps.assets) return
   const svc = deps.assets
   ipcMain.removeHandler(IPC.assetsImport)
   ipcMain.handle(IPC.assetsImport, (_e, input: { templateId: string; sourcePath: string }) =>

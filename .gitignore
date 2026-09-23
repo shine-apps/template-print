@@ -1,0 +1,19 @@
+# 依赖与构建
+node_modules/
+dist/
+out/
+release/
+
+# 脑暴可视化伴侣本地产物
+.superpowers/
+
+# 本地数据库与资源
+*.db
+*.db-journal
+assets/
+thumbs/
+
+# 环境与日志
+.env
+.env.local
+*.log

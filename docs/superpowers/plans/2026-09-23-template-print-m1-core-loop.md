@@ -6,16 +6,19 @@
 
 **Architecture:** Electron 三端（main / preload / renderer）+ React。渲染进程只做 UI，经类型安全 IPC 调主进程服务；纯逻辑核心 `print-core/`（zod 模型、参数求值、打印 HTML 文档）无 DOM 依赖可单测；Drizzle + better-sqlite3，SQL 收敛在 repositories；离屏隐藏窗口加载打印 HTML 后调 `webContents.print` 输出。
 
-**Tech Stack:** Electron 31 / electron-vite 2 / React 18 / TypeScript 5 / Ant Design 5 / Zustand 4 / Konva 9 + react-konva 18 / Drizzle ORM 0.33 + better-sqlite3 11 / zod 3 / dayjs / Vitest 2 / electron-builder 25
+**Tech Stack:** Node.js 24 + npm 11 / Electron 31 / electron-vite 2 / React 18 / TypeScript 5 / Ant Design 5 / Zustand 4 / Konva 9 + react-konva 18 / Drizzle ORM 0.33 + better-sqlite3 12 / zod 3 / dayjs / Vitest 2 / electron-builder 25
 
 **约定：**
 
-- 包管理器用 Bun；命令同时给出 npm 等价形式。
+- 运行时统一为 **Node.js v24 + npm**（不使用 Bun）；锁文件为 package-lock.json。依赖安装 `npm install`（npm 11 需先 `npm install-scripts approve better-sqlite3 electron esbuild` 允许生命周期脚本）。
+- 常用命令：`npm run dev` / `npm run build` / `npm test`（可加 `-- <路径>`）/ `npm run typecheck` / `npm run dist`。
 - 所有几何单位内部一律毫米（mm），Chromium 纸张用微米（μm），字号内部存 mm、界面显示 pt。
 - 每个任务结束都提交；提交命令中如本机 git 身份未配置，统一追加 `-c user.name=dev -c user.email=dev@local`。
 - 本计划只含 M1；条码/二维码、旋转、吸附、导入导出、打印机状态检查属于 M2，不在本计划。
-- 测试一律用 Node 运行：`npx vitest run [路径]`（Windows 版 Bun 不支持 better-sqlite3 等原生模块）。
-- tsc 调用本地编译器：`node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json`（本机 npx 会误拉到全局 tsc 2.0.4）。
+- 测试在 Node v24 下运行：`npm test` 或 `npx vitest run [路径]`。
+- 类型检查：`npm run typecheck`（npm 会把 node_modules/.bin 加入 PATH，tsc 解析到本地版本）。
+- 历史任务文本中出现的 `bun ...` 命令一律等价替换：`bun install→npm install`、`bun run X→npm run X`、`bunx X→npx X`、`bun run test→npm test`。
+- better-sqlite3 原生二进制 ABI 切换（vitest 用 node ABI 137 / Electron 31 用 ABI 125）：`npm run bin:node` 与 `npm run bin:electron`（scripts/switch-sqlite.ps1，与包管理器无关）。
 
 ### 实施勘误（Task 2–5 落地后更新，后续任务以此为准）
 

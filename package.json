@@ -43,5 +43,10 @@
     "typescript": "^5.5.4",
     "vite": "^5.4.6",
     "vitest": "^2.1.1"
+  },
+  "allowScripts": {
+    "better-sqlite3": true,
+    "electron": true,
+    "esbuild": true
   }
 }

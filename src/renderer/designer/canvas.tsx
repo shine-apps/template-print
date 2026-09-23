@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { Stage, Layer, Rect, Text as KText, Line, Ellipse, Group, Transformer } from 'react-konva'
+import { Stage, Layer, Rect, Text as KText, Image as KImage, Line, Ellipse, Group, Transformer } from 'react-konva'
 import type Konva from 'konva'
 import { mmToPxAt96 } from '../../../shared/units'
 import { useDesignerStore } from '../store/designer-store'
 import type { TemplateElement } from '../../../print-core/template-model'
+
+function useLoadedImage(url: string | undefined): HTMLImageElement | undefined {
+  const [img, setImg] = useState<HTMLImageElement | undefined>()
+  useEffect(() => {
+    if (!url) { setImg(undefined); return }
+    const i = new window.Image()
+    i.onload = () => setImg(i)
+    i.src = url
+  }, [url])
+  return img
+}
 
 const MM = (v: number, scale: number): number => mmToPxAt96(v) * scale
 // 直线/椭圆用 Group 包装（Group 的 x/y 即左上角），Group 无 width/height，
@@ -12,16 +23,19 @@ function isGroupWrapped(el: TemplateElement): boolean {
   return el.type === 'shape' && el.props.shape !== 'rect'
 }
 
-function ElementShape({ el, scale, selected, onSelect, onChange }: {
+function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls }: {
   el: TemplateElement
   scale: number
   selected: boolean
   onSelect: () => void
   onChange: (patch: Partial<Pick<TemplateElement, 'x' | 'y' | 'w' | 'h'>>) => void
+  assetUrls: Record<string, string>
 }): JSX.Element {
   const shapeRef = useRef<Konva.Node>(null)
   const trRef = useRef<Konva.Transformer>(null)
   const { updateProps } = useDesignerStore()
+  // hooks 必须在所有条件分支之前无条件调用
+  const imageEl = useLoadedImage(el.type === 'image' ? assetUrls[el.props.assetId] : undefined)
 
   useEffect(() => {
     if (selected && shapeRef.current && trRef.current) {
@@ -105,8 +119,12 @@ function ElementShape({ el, scale, selected, onSelect, onChange }: {
       body = <Rect ref={shapeRef as never} {...common}
         stroke={el.props.strokeColor} strokeWidth={stk} fill={el.props.fillColor ?? undefined} />
     }
+  } else if (el.type === 'image') {
+    // M1 统一 contain：KImage 直接拉伸到元素框；无 crop 计算（fit 切换放 M2）
+    body = (
+      <KImage ref={shapeRef as never} {...common} image={imageEl} opacity={el.props.opacity} />
+    )
   } else {
-    // 图片元素在 Task 16 替换为真实 KImage；在此之前是占位虚线框
     body = <Rect ref={shapeRef as never} {...common} fill="#e6f4ff" stroke="#1677ff" dash={[6, 4]} />
   }
 
@@ -131,6 +149,11 @@ export function DesignerCanvas(): JSX.Element {
   const commit = useDesignerStore((s) => s.commit)
   const removeElement = useDesignerStore((s) => s.removeElement)
   const [scale, setScale] = useState(1)
+  const [assetUrls, setAssetUrls] = useState<Record<string, string>>({})
+  const imageCount = doc.content.elements.filter((e) => e.type === 'image').length
+  useEffect(() => {
+    void window.api.assets.listUrls(doc.id).then(setAssetUrls).catch(() => setAssetUrls({}))
+  }, [doc.id, imageCount])
 
   const pw = MM(doc.paper.widthMm, scale)
   const ph = MM(doc.paper.heightMm, scale)
@@ -156,7 +179,8 @@ export function DesignerCanvas(): JSX.Element {
           {sorted.map((el) => (
             <ElementShape key={el.id} el={el} scale={scale} selected={el.id === selectedId}
               onSelect={() => select(el.id)}
-              onChange={(patch) => updateGeometry(el.id, patch)} />
+              onChange={(patch) => updateGeometry(el.id, patch)}
+              assetUrls={assetUrls} />
           ))}
         </Layer>
       </Stage>

@@ -2929,13 +2929,18 @@ git commit -m "feat(designer): zustand 文档 store 与撤销重做"
 
 ```tsx
 import { useEffect, useRef, useState } from 'react'
-import { Stage, Layer, Rect, Text as KText, Line, Ellipse, Transformer } from 'react-konva'
+import { Stage, Layer, Rect, Text as KText, Line, Ellipse, Group, Transformer } from 'react-konva'
 import type Konva from 'konva'
 import { mmToPxAt96 } from '../../../shared/units'
 import { useDesignerStore } from '../store/designer-store'
 import type { TemplateElement } from '../../../print-core/template-model'
 
 const MM = (v: number, scale: number): number => mmToPxAt96(v) * scale
+// 直线/椭圆用 Group 包装（Group 的 x/y 即左上角），Group 无 width/height，
+// 这类元素只支持拖动改坐标，尺寸由右侧属性面板修改。
+function isGroupWrapped(el: TemplateElement): boolean {
+  return el.type === 'shape' && el.props.shape !== 'rect'
+}
 
 function ElementShape({ el, scale, selected, onSelect, onChange }: {
   el: TemplateElement
@@ -2971,11 +2976,16 @@ function ElementShape({ el, scale, selected, onSelect, onChange }: {
     onTransformEnd: () => {
       const node = shapeRef.current
       if (!node) return
+      // Group 包装元素只回传坐标
+      if (node.className === 'Group') {
+        onChange({ x: node.x() / mmToPxAt96(1) / scale, y: node.y() / mmToPxAt96(1) / scale })
+        return
+      }
       onChange({
         x: node.x() / mmToPxAt96(1) / scale,
         y: node.y() / mmToPxAt96(1) / scale,
-        w: node.width() * node.scaleX() / mmToPxAt96(1) / scale,
-        h: node.height() * node.scaleY() / mmToPxAt96(1) / scale
+        w: Math.max(1, node.width() * node.scaleX() / mmToPxAt96(1) / scale),
+        h: Math.max(1, node.height() * node.scaleY() / mmToPxAt96(1) / scale)
       })
       node.scaleX(1); node.scaleY(1)
     }
@@ -3004,26 +3014,41 @@ function ElementShape({ el, scale, selected, onSelect, onChange }: {
   } else if (el.type === 'shape') {
     const stk = MM(el.props.strokeWidthMm, scale)
     if (el.props.shape === 'line') {
-      body = <Line ref={shapeRef as never} {...common} points={[0, MM(el.h, scale) / 2, MM(el.w, scale), MM(el.h, scale) / 2]}
-        stroke={el.props.strokeColor} strokeWidth={stk} />
+      // Group 定位在左上角；内部 Line 相对 Group 画水平中线，不接收指针事件
+      body = (
+        <Group ref={shapeRef as never} {...common}>
+          <Line listening={false}
+            points={[0, MM(el.h, scale) / 2, MM(el.w, scale), MM(el.h, scale) / 2]}
+            stroke={el.props.strokeColor} strokeWidth={stk} />
+        </Group>
+      )
     } else if (el.props.shape === 'ellipse') {
-      body = <Ellipse ref={shapeRef as never} {...common}
-        x={MM(el.x, scale) + MM(el.w, scale) / 2} y={MM(el.y, scale) + MM(el.h, scale) / 2}
-        radiusX={MM(el.w, scale) / 2} radiusY={MM(el.h, scale) / 2}
-        stroke={el.props.strokeColor} strokeWidth={stk} fill={el.props.fillColor ?? undefined} />
+      body = (
+        <Group ref={shapeRef as never} {...common}>
+          <Ellipse listening={false}
+            x={MM(el.w, scale) / 2} y={MM(el.h, scale) / 2}
+            radiusX={MM(el.w, scale) / 2} radiusY={MM(el.h, scale) / 2}
+            stroke={el.props.strokeColor} strokeWidth={stk} fill={el.props.fillColor ?? undefined} />
+        </Group>
+      )
     } else {
       body = <Rect ref={shapeRef as never} {...common}
         stroke={el.props.strokeColor} strokeWidth={stk} fill={el.props.fillColor ?? undefined} />
     }
   } else {
+    // 图片元素在 Task 16 替换为真实 KImage；在此之前是占位虚线框
     body = <Rect ref={shapeRef as never} {...common} fill="#e6f4ff" stroke="#1677ff" dash={[6, 4]} />
   }
 
   return (
     <>
       {body}
-      {selected && <Transformer ref={trRef} rotateEnabled={false} boundBoxFunc={(oldBox, newBox) =>
-        newBox.width < 4 || newBox.height < 4 ? oldBox : newBox} />}
+      {selected && (
+        <Transformer ref={trRef} rotateEnabled={false}
+          enabledAnchors={isGroupWrapped(el) ? [] : undefined}
+          boundBoxFunc={(oldBox, newBox) =>
+            newBox.width < 4 || newBox.height < 4 ? oldBox : newBox} />
+      )}
     </>
   )
 }

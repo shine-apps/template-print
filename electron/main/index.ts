@@ -13,6 +13,7 @@ import { HistoryService } from './services/history-service'
 import { PrintService } from './services/print-service'
 import { PrinterService } from './services/printer-service'
 import { SettingsService } from './services/settings-service'
+import { BackupService } from './services/backup-service'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -46,10 +47,12 @@ app.whenReady().then(() => {
   const history = new HistoryService(p.dataDir, new JobRepository(client.db), settings)
   const print = new PrintService(p.dataDir, assets, history)
   const printers = new PrinterService(p.dataDir, print)
-  const services: Services = { assets, templates, history, print, printers, settings }
+  const backups = new BackupService(p.dataDir, p.backupsDir, client)
+  const services: Services = { assets, templates, history, print, printers, settings, backups }
   const win = createWindow()
   registerIpc(win, services)
   history.runScheduledCleanup()
+  void backups.runDaily()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

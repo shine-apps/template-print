@@ -37,6 +37,10 @@ const api = {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     set: (patch: unknown) => ipcRenderer.invoke(IPC.settingsSet, patch)
   },
+  backups: {
+    run: () => ipcRenderer.invoke(IPC.backupRun),
+    openDir: () => ipcRenderer.invoke(IPC.backupOpen)
+  },
   thumbUrl: (path: string) => ipcRenderer.invoke(IPC.thumbFileUrl, path)
 }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button, Card, Modal, Select, Space, Tag, message } from 'antd'
+import dayjs from 'dayjs'
 import { api } from '../api'
 import type { PrinterInfoDto, PrinterRuntimeStatus } from '../../../shared/ipc-contract'
 
@@ -75,6 +76,32 @@ export function HistoryCard(): JSX.Element {
   )
 }
 
+export function BackupCard(): JSX.Element {
+  const [lastAt, setLastAt] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { void api.settings.get().then((s) => setLastAt(s.lastBackupAt)) }, [])
+  return (
+    <Card size="small" title="数据备份" style={{ marginBottom: 12 }}>
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <span style={{ color: '#666' }}>
+          上次自动备份：{lastAt ? dayjs(lastAt).format('YYYY-MM-DD HH:mm') : '尚未备份'}（每天首次启动自动备份，保留最近 7 份）
+        </span>
+        <Space>
+          <Button size="small" type="primary" loading={busy} onClick={async () => {
+            setBusy(true)
+            try {
+              const f = await api.backups.run()
+              message.success('备份完成：' + f.split(/[\\/]/).pop())
+              setLastAt(Date.now())
+            } finally { setBusy(false) }
+          }}>立即备份</Button>
+          <Button size="small" onClick={() => void api.backups.openDir()}>打开备份目录</Button>
+        </Space>
+      </Space>
+    </Card>
+  )
+}
+
 export function SettingsPage(): JSX.Element {
   const [printers, setPrinters] = useState<PrinterInfoDto[]>([])
   const [appDefault, setAppDefault] = useState<string | null>(null)
@@ -110,6 +137,7 @@ export function SettingsPage(): JSX.Element {
 
   return (
     <div style={{ padding: 16, maxWidth: 720 }}>
+      <BackupCard />
       <HistoryCard />
       <Space style={{ justifyContent: 'space-between', width: '100%', marginBottom: 8 }}>
         <h3 style={{ margin: 0 }}>打印机设置</h3>

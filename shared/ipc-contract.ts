@@ -66,7 +66,9 @@ export const IPC = {
   jobsCount: 'jobs:count',
   thumbFileUrl: 'thumb:file-url',
   settingsGet: 'settings:get',
-  settingsSet: 'settings:set'
+  settingsSet: 'settings:set',
+  backupRun: 'backup:run',
+  backupOpen: 'backup:open'
 } as const
 
 export interface Api {
@@ -104,6 +106,10 @@ export interface Api {
   settings: {
     get(): Promise<AppSettingsDto>
     set(patch: SettingsPatch): Promise<AppSettingsDto>
+  }
+  backups: {
+    run(): Promise<string>
+    openDir(): Promise<void>
   }
   thumbUrl(path: string): Promise<string>
 }

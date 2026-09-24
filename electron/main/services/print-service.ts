@@ -72,10 +72,12 @@ export class PrintService {
     // IPC 入参不可信，先经模型校验（非法结构直接 reject，由渲染端提示）
     const doc = TemplateDocumentSchema.parse(input.template)
     const paramValues = input.paramValues
-    // 打印前校验：图片资产必须存在
-    for (const el of doc.content.elements) {
-      if (el.type === 'image' && !this.assets.repo.get(el.props.assetId)) {
-        throw new Error(`模板引用的图片不存在（元素 ${el.id}），请重新上传后再打印`)
+    // 打印前校验：图片资产必须存在（仅打印文本时图片不输出，缺资产不应拦截）
+    if (!doc.textOnly) {
+      for (const el of doc.content.elements) {
+        if (el.type === 'image' && !this.assets.repo.get(el.props.assetId)) {
+          throw new Error(`模板引用的图片不存在（元素 ${el.id}），请重新上传后再打印`)
+        }
       }
     }
     const values = evaluateParams(doc.params, paramValues)

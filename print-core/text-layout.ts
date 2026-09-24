@@ -1,5 +1,7 @@
+// 注意：该常量会内联进打印 HTML 的 style="..." 双引号属性中，字体名只能用单引号，
+// 双引号会提前闭合 style 属性导致后续声明全部丢失（打印回退默认字体/无加粗下划线）。
 export const SYSTEM_FONT_STACK =
-  'system-ui, "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif'
+  "system-ui, 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', sans-serif"
 
 export type TextDirection = 'horizontal' | 'vertical'
 export type TextAlign = 'left' | 'center' | 'right'

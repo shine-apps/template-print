@@ -56,9 +56,12 @@ export class FontService {
 
   async list(): Promise<FontListDto> {
     if (this.cache) return this.cache
-    // 查询失败（非 Windows / 超时 / 退出码非 0）一律回落空数组 → 仅兜底字体
-    const detected = await this.queryRegistry().catch(() => [])
-    this.cache = buildFontList(detected)
+    // 查询失败（非 Windows / 超时 / 退出码非 0）一律回落空数组 → 仅兜底字体。
+    // 注意：PowerShell 返回的是注册表属性原值（如 "Arial (TrueType)"、
+    // "Microsoft YaHei & Microsoft YaHei UI (TrueType)"），必须经 parseFontRegistryEntries
+    // 清洗成可用 CSS 家族名，否则选中后字体不生效。
+    const raw = await this.queryRegistry().catch(() => [])
+    this.cache = buildFontList(parseFontRegistryEntries(raw))
     return this.cache
   }
 

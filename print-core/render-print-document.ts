@@ -83,9 +83,10 @@ function renderTextHtml(
     // 外层 flex row-reverse 实现列组对齐（left=贴右=flex-start）；内层 vertical-rl 实现竖排
     return `<div style="display:flex;flex-direction:row-reverse;justify-content:${justify};width:100%;height:100%;overflow:hidden">` +
       `<div style="writing-mode:vertical-rl;text-orientation:mixed;height:100%;${fontCss(p)};` +
-      `color:${p.color};line-height:${p.lineHeight};white-space:pre-wrap;overflow:hidden;${deco}">${body}</div></div>`
+      `color:${p.color};line-height:${p.lineHeight};white-space:pre-wrap;word-break:break-word;overflow:hidden;${deco}">${body}</div></div>`
   }
-  return `<div style="${fontCss(p)};color:${p.color};line-height:${p.lineHeight};` +
+  // height:100% 把文本约束在元素框内，超出部分由 overflow:hidden 裁剪（与画布 LaidText 裁剪一致）
+  return `<div style="height:100%;${fontCss(p)};color:${p.color};line-height:${p.lineHeight};` +
     `text-align:${p.align};white-space:pre-wrap;word-break:break-word;overflow:hidden;${deco}">${body}</div>`
 }
 

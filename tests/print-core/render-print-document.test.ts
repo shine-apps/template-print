@@ -88,6 +88,35 @@ describe('renderPrintDocument', () => {
     expect(html).toContain('text-orientation:mixed')
     expect(html).toContain('flex-direction:row-reverse')
     expect(html).toContain('justify-content:flex-start')
+    // 竖排同样允许超长 ASCII 串逐字断列，与 layoutText 强制断字一致
+    expect(html).toContain('word-break:break-word')
+  })
+
+  it('横排文本内层撑满元素框并裁剪溢出（height:100% + overflow:hidden）', () => {
+    const doc = baseDoc([createElement('text', { text: '很长的中文内容'.repeat(8) }, { x: 1, y: 1, w: 30, h: 10 })])
+    const html = renderPrintDocument(doc, {}, {})
+    const body = [...html.matchAll(/style="([^"]*)"/g)].map((m) => m[1])
+      .find((s) => s.includes('text-align:left'))
+    expect(body).toContain('height:100%')
+    expect(body).toContain('overflow:hidden')
+  })
+
+  it('内联 style 中字体名只用单引号：双引号会提前闭合属性导致加粗/下划线等声明丢失', () => {
+    const doc = baseDoc([
+      createElement('text',
+        { text: '甲乙', fontFamily: '', bold: true, italic: true, underline: true, direction: 'vertical', align: 'center' },
+        { x: 1, y: 1, w: 20, h: 40 })
+    ])
+    const html = renderPrintDocument(doc, {}, {})
+    const bodies = [...html.matchAll(/style="([^"]*)"/g)].map((m) => m[1])
+    // 双引号回归时，正则只能截到残缺片段，含 font-weight 的声明体会找不到
+    const textBody = bodies.find((s) => s.includes('font-weight:bold'))
+    expect(textBody).toBeTruthy()
+    expect(textBody).toContain("'Microsoft YaHei'")
+    expect(textBody).toContain('font-style:italic')
+    expect(textBody).toContain('text-decoration:underline')
+    expect(textBody).toContain('writing-mode:vertical-rl')
+    expect(html).not.toContain('"Microsoft YaHei"')
   })
 
   it('空值横线占位为 text-decoration（非 border-bottom）', () => {

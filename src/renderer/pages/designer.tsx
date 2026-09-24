@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Button, Space, Spin, Input, Select, message } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
+import { Button, Space, Spin, Input, Select, Tooltip, message } from 'antd'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useDesignerStore } from '../store/designer-store'
@@ -17,6 +17,8 @@ export function DesignerPage(): JSX.Element {
   const [loading, setLoading] = useState(true)
   // 无 sessionDraft 且无模板 id（直接点「模板设计」菜单进入）时立即弹新建模板窗
   const [createOpen, setCreateOpen] = useState(false)
+  // 「保存并去打印」进行中
+  const [savingToPrint, setSavingToPrint] = useState(false)
   const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([])
   const doc = useDesignerStore((s) => s.doc)
   const mode = useDesignerStore((s) => s.mode)
@@ -53,14 +55,39 @@ export function DesignerPage(): JSX.Element {
     })
   }, [])
 
-  async function save(): Promise<void> {
+  // 实时校验：未修改或校验未通过时「保存并去打印」禁用（safeParse 同步，doc 变更才重渲染）
+  const saveIssue = useMemo(() => {
+    const r = TemplateDocumentSchema.safeParse(doc)
+    return r.success ? null : (r.error.issues[0]?.message ?? '模板校验未通过')
+  }, [doc])
+  const canSaveAndPrint = dirty && !saveIssue
+
+  /** 保存当前模板；成功返回 true，失败弹错误提示并返回 false（调用方不得继续跳转） */
+  async function save(): Promise<boolean> {
+    const parsed = TemplateDocumentSchema.safeParse(doc)
+    if (!parsed.success) {
+      message.error('保存失败：' + (parsed.error.issues[0]?.message ?? '模板校验未通过'))
+      return false
+    }
     try {
-      const parsed = TemplateDocumentSchema.parse(doc)
-      await api.templates.save(parsed)
+      await api.templates.save(parsed.data)
       markSaved()
       message.success('已保存')
+      return true
     } catch (e) {
       message.error('保存失败：' + (e instanceof Error ? e.message : String(e)))
+      return false
+    }
+  }
+
+  async function saveAndPrint(): Promise<void> {
+    setSavingToPrint(true)
+    try {
+      const ok = await save()
+      // 保存失败已提示，且不跳转打印页
+      if (ok) nav(`/print/${doc.id}`)
+    } finally {
+      setSavingToPrint(false)
     }
   }
   function backToPrint(): void {
@@ -99,7 +126,7 @@ export function DesignerPage(): JSX.Element {
         <Space style={{ background: '#fff', padding: 8, borderBottom: '1px solid #eee' }}>
           <Button onClick={() => { useDesignerStore.getState().undo() }}>撤销</Button>
           <Button onClick={() => { useDesignerStore.getState().redo() }}>重做</Button>
-          <Input variant="borderless" style={{ width: 140 }} value={doc.name}
+          <Input variant="outlined" style={{ width: 140 }} value={doc.name}
             onChange={(e) => useDesignerStore.getState().mutate((d) => { d.name = e.target.value })} />
           <span style={{ color: '#888' }}>{doc.paper.widthMm}×{doc.paper.heightMm}mm</span>
           <Select style={{ width: 130 }} placeholder="分类" allowClear showSearch
@@ -122,7 +149,18 @@ export function DesignerPage(): JSX.Element {
           {dirty && <span style={{ color: '#fa8c16' }}>未保存</span>}
           {mode === 'print-session'
             ? <Button type="primary" onClick={backToPrint}>完成，返回打印</Button>
-            : <Button type="primary" onClick={save}>保存模板</Button>}
+            : (
+              <>
+                <Button type="primary" onClick={save}>保存模板</Button>
+                <Tooltip title={canSaveAndPrint ? '' : (!dirty ? '没有需要保存的修改' : saveIssue ?? '模板校验未通过')}>
+                  <span style={{ display: 'inline-block' }}>
+                    <Button onClick={saveAndPrint} loading={savingToPrint} disabled={!canSaveAndPrint}>
+                      保存并去打印
+                    </Button>
+                  </span>
+                </Tooltip>
+              </>
+            )}
         </Space>
         <div style={{ flex: 1 }}><DesignerCanvas /></div>
       </div>

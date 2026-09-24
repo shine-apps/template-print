@@ -14,6 +14,7 @@ interface TemplateRow {
   printerName: string | null
   isBuiltin: number | boolean
   version: number
+  textOnly: number | boolean
   createdAt: number
   updatedAt: number
 }
@@ -54,6 +55,7 @@ export class TemplateRepository {
         printerName: doc.printerName,
         isBuiltin: doc.isBuiltin,
         version: doc.version,
+        textOnly: doc.textOnly,
         createdAt: doc.createdAt,
         updatedAt: doc.updatedAt
       }
@@ -82,6 +84,7 @@ export class TemplateRepository {
       id: row.id, name: row.name, category: row.category, paper: row.paper,
       content: row.content, printMode: row.printMode, printerName: row.printerName,
       isBuiltin: !!row.isBuiltin, version: row.version,
+      textOnly: !!row.textOnly,
       createdAt: row.createdAt, updatedAt: row.updatedAt,
       params: params.slice().sort((a, b) => a.order - b.order).map((pr) => ({
         name: pr.name, type: pr.type, required: !!pr.required, defaultValue: pr.defaultValue,

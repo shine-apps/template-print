@@ -61,5 +61,14 @@ describe('.tplx 往返', () => {
     expect(imgEl).toBeTruthy()
     const dataUrl = await (svc as unknown as { assets: AssetService }).assets.toDataUrl(imgEl.props.assetId)
     expect(dataUrl.startsWith('data:image/png;base64,')).toBe(true)
+
+    // textOnly 随 .tplx 导出导入保留
+    const flag = await svc.get(tpl.id)
+    flag!.textOnly = false
+    await svc.save(flag!)
+    const tplx2 = join(dataDir, 'out2.tplx')
+    await svc.exportToFile(tpl.id, tplx2)
+    const imported2 = await svc.importFromFile(tplx2)
+    expect(imported2.textOnly).toBe(false)
   })
 })

@@ -74,6 +74,15 @@ describe('TemplateRepository', () => {
     expect(client.sqlite.prepare('SELECT COUNT(*) c FROM template_params').get() as { c: number })
       .toMatchObject({ c: 0 })
   })
+
+  it('textOnly 持久化：显式 false 写读一致；缺省模板为 true', () => {
+    const off = sample('t1'); off.textOnly = false
+    repo.upsert(off)
+    expect(repo.getById('t1')?.textOnly).toBe(false)
+
+    repo.upsert(sample('t2'))
+    expect(repo.getById('t2')?.textOnly).toBe(true)
+  })
 })
 
 describe('JobRepository', () => {
@@ -212,6 +221,10 @@ describe('v1 旧库一次性升级', () => {
       const doc2 = r.getById('old1')!
       expect(doc2.version).toBe(3)
       expect(doc2.params.map((p) => p.name)).toEqual(['姓名'])
+      const tcols = (legacy.sqlite.prepare('PRAGMA table_info(templates)').all() as { name: string }[]).map((c) => c.name)
+      expect(tcols).toContain('text_only')
+      // 存量行迁移默认 text_only=1，经仓储读回为 true
+      expect(r.getById('old1')?.textOnly).toBe(true)
     } finally {
       legacy.sqlite.close()
       rmSync(legacyPath, { force: true })

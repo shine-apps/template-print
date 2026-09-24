@@ -10,6 +10,7 @@ export const templates = sqliteTable('templates', {
   printerName: text('printer_name'),
   isBuiltin: integer('is_builtin', { mode: 'boolean' }).notNull().default(false),
   version: integer('version').notNull().default(1),
+  textOnly: integer('text_only', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull()
 })

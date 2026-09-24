@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS templates (
   paper TEXT NOT NULL, content TEXT NOT NULL,
   print_mode TEXT NOT NULL DEFAULT 'silent', printer_name TEXT,
   is_builtin INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1,
+  text_only INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS template_params (
@@ -103,13 +104,25 @@ function migrateParamsTable(client: DbClient): void {
 }
 
 /**
+ * ④ templates 增加 text_only 列（幂等）。
+ * 旧库 ALTER ADD COLUMN ... DEFAULT 1：存量模板一次性默认"仅打印文本"（用户已确认的统一规则）。
+ */
+function addTextOnlyColumn(client: DbClient): void {
+  const cols = client.sqlite.prepare("PRAGMA table_info(templates)").all() as { name: string }[]
+  if (cols.length === 0 || cols.some((c) => c.name === 'text_only')) return
+  client.sqlite.exec('ALTER TABLE templates ADD COLUMN text_only INTEGER NOT NULL DEFAULT 1')
+}
+
+/**
  * 启动时一次性升级（顺序不可调换）：
  * ① 旧库：文档/历史快照升级为 v3（需要旧 key/label）
  * ② 新库建表（全部 IF NOT EXISTS；旧库不受影响）
+ * ④ 旧库：templates 增加 text_only 列
  * ③ 旧库：template_params 由 id/key/label 重建为 name
  */
 export function runMigrations(client: DbClient): void {
   upgradeDocumentsToV2(client)
   client.sqlite.exec(DDL)
+  addTextOnlyColumn(client)
   migrateParamsTable(client)
 }

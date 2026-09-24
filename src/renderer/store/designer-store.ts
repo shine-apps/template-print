@@ -28,7 +28,8 @@ interface DesignerState {
   updateProps(id: string, patch: Record<string, unknown>): void
   reorderLayer(id: string, beforeId: string | null): void
   addOrUpdateParam(p: ParamDef): void
-  removeParam(id: string): void
+  removeParam(name: string): void
+  renameParam(oldName: string, def: ParamDef): void
   markSaved(): void
 }
 
@@ -61,8 +62,7 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
     const cur = get().doc
     const next = clone(cur)
     fn(next)
-    // 校验失败时保留旧文档；param 元素新建瞬间参数可能尚未登记，会导致校验失败，
-    // 因此 param 元素与参数定义必须在同一次 mutate 内成对加入（Task 15）。
+    // 校验失败时保留旧文档（如参数名称在模板内重复）。
     if (!TemplateDocumentSchema.safeParse(next).success) return
     // 每次成功变更前把旧文档压入撤销栈（标准 pre-state 快照），
     // 新分支动作清空 redo 栈；栈深上限 50。
@@ -127,18 +127,29 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   },
   addOrUpdateParam(p) {
     get().mutate((d) => {
-      const i = d.params.findIndex((x) => x.id === p.id)
+      const i = d.params.findIndex((x) => x.name === p.name)
       if (i >= 0) d.params[i] = p
       else d.params.push({ ...p, order: d.params.length })
     })
   },
-  removeParam(id) {
+  removeParam(name) {
     get().mutate((d) => {
-      d.params = d.params.filter((p) => p.id !== id)
-      // 同步删除画布上引用该参数的元素
-      d.content.elements = d.content.elements.filter(
-        (e) => !(e.type === 'param' && e.props.paramId === id)
-      )
+      d.params = d.params.filter((p) => p.name !== name)
+    })
+  },
+  renameParam(oldName, def) {
+    get().mutate((d) => {
+      // 同步替换全部文本元素中的 {{oldName}}（容忍括号内空白），统一规范为 {{新名}}
+      const esc = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const re = new RegExp(`\\{\\{\\s*${esc}\\s*\\}\\}`, 'g')
+      for (const el of d.content.elements) {
+        if (el.type === 'text' && el.props.text.includes('{{')) {
+          el.props.text = el.props.text.replace(re, `{{${def.name}}}`)
+        }
+      }
+      const i = d.params.findIndex((p) => p.name === oldName)
+      if (i >= 0) d.params[i] = def
+      else d.params.push({ ...def, order: d.params.length })
     })
   },
   markSaved() {

@@ -90,13 +90,6 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls, onDr
           if (v !== null) updateProps(el.id, { text: v })
         }} />
     )
-  } else if (el.type === 'param') {
-    body = (
-      <KText ref={shapeRef as never} {...common}
-        text={`{{${el.props.paramId.slice(0, 6)}}}`}
-        fontSize={MM(el.props.fontSizeMm, scale)} fontStyle={el.props.bold ? 'bold' : 'normal'}
-        fill={el.props.color} dash={[4, 3]} />
-    )
   } else if (el.type === 'shape') {
     const stk = MM(el.props.strokeWidthMm, scale)
     if (el.props.shape === 'line') {

@@ -46,6 +46,18 @@ export function PropertyPanel({ onCommitted }: { onCommitted: () => void }): JSX
           {el.type === 'text' && (
             <>
               <Input.TextArea rows={2} value={el.props.text} onChange={(e) => props({ text: e.target.value })} />
+              {doc.params.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>插入参数到文本末尾</div>
+                  <Select size="small" style={{ width: '100%' }} placeholder="选择参数"
+                    options={doc.params.map((p) => ({ value: p.name, label: `{{${p.name}}}` }))}
+                    onChange={(name) => {
+                      if (!name) return
+                      const cur = el.type === 'text' ? el.props.text : ''
+                      updateProps(el.id, { text: `${cur}${cur && !/\s$/.test(cur) ? ' ' : ''}{{${name}}}` })
+                    }} />
+                </div>
+              )}
               <Space wrap>
                 字号
                 <InputNumber size="small" style={{ width: 90 }} min={1}
@@ -62,22 +74,6 @@ export function PropertyPanel({ onCommitted }: { onCommitted: () => void }): JSX
               颜色 <ColorPicker size="small" value={el.props.color}
                 onChange={(c) => props({ color: c.toHexString() })} />
             </>
-          )}
-
-          {el.type === 'param' && (
-            <div style={{ color: '#1677ff', fontSize: 12 }}>
-              绑定参数：{doc.params.find((p) => p.id === el.props.paramId)?.label ?? '（已删除）'}
-              <div style={{ marginTop: 6 }}>
-                <Space wrap>
-                  字号
-                  <InputNumber size="small" style={{ width: 90 }} min={1}
-                    value={Number(mmToPt(el.props.fontSizeMm).toFixed(1))} addonAfter="pt"
-                    onChange={(v) => props({ fontSizeMm: ptToMm(Math.max(1, v ?? 1)) })} />
-                  <Button size="small" type={el.props.bold ? 'primary' : 'default'}
-                    onClick={() => props({ bold: !el.props.bold })}>B</Button>
-                </Space>
-              </div>
-            </div>
           )}
 
           {el.type === 'shape' && (

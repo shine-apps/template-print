@@ -191,9 +191,11 @@ export function createElement(
 export function createParamDef(
   input: Pick<ParamDef, 'name' | 'type'> & Partial<ParamDef>
 ): ParamDef {
+  // name/type 显式前置、其余字段通过 rest 展开，避免同名属性重复指定（TS2783）
+  const { name, type, ...rest } = input
   return ParamDefSchema.parse({
-    name: input.name,
-    type: input.type,
+    name,
+    type,
     required: true,
     defaultValue: '',
     dateFormat: 'yyyy-MM-dd',
@@ -204,6 +206,6 @@ export function createParamDef(
     thousandsSeparator: false,
     printOnEmpty: 'blank',
     order: 0,
-    ...input
+    ...rest
   })
 }

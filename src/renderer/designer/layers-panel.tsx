@@ -2,7 +2,7 @@ import { useDesignerStore } from '../store/designer-store'
 import type { ElementType } from '../../../print-core/template-model'
 
 const LABEL: Record<ElementType, string> = {
-  text: '文本', param: '参数', image: '图片', shape: '图形'
+  text: '文本', image: '图片', shape: '图形'
 }
 
 export function LayersPanel(): JSX.Element {

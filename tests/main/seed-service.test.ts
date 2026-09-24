@@ -47,9 +47,8 @@ describe('seedSpecs / SeedService', () => {
       '品名',
       '价格'
     ])
-    // 参数不再是画布元素：全部规格均无 param 元素，且文本中含 {{名称}} token
+    // 参数不再是画布元素：文本中含 {{名称}} token（v2 联合类型已无 param 元素）
     for (const s of specs) {
-      expect(s.content.elements.some((e) => e.type === 'param')).toBe(false)
       expect(s.content.elements.some((e) => e.type === 'text' && e.props.text.includes('{{'))).toBe(true)
     }
   })

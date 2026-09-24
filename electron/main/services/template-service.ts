@@ -42,8 +42,8 @@ export class TemplateService {
   async duplicate(id: string): Promise<TemplateDocument> {
     const src = this.repo.getById(id)
     if (!src) throw new Error('模板不存在')
-    // 深拷贝并重新分配模板/元素/参数 id，参数元素重新指向新参数 id
-    const paramIdMap = new Map<string, string>()
+    // v2：参数没有独立 id，副本直接沿用参数名称（副本是全新模板，名称不冲突）；
+    // 元素重新分配元素 id；图片资产不复制文件，副本直接过滤掉图片元素。
     const now = Date.now()
     const copy: TemplateDocument = TemplateDocumentSchema.parse({
       ...structuredClone(src),
@@ -53,18 +53,9 @@ export class TemplateService {
       createdAt: now,
       updatedAt: now
     })
-    copy.params = copy.params.map((p) => {
-      const nid = localId('param')
-      paramIdMap.set(p.id, nid)
-      return { ...p, id: nid }
-    })
-    copy.content.elements = copy.content.elements.map((el) =>
-      el.type === 'param'
-        ? { ...el, id: localId('el'), props: { ...el.props, paramId: paramIdMap.get(el.props.paramId)! } }
-        : { ...el, id: localId('el') }
-    )
-    // 图片资产在 M1 不复制文件（副本暂时不带图，用户可重新上传）
-    copy.content.elements = copy.content.elements.filter((el) => el.type !== 'image')
+    copy.content.elements = structuredClone(src)
+      .content.elements.filter((el) => el.type !== 'image')
+      .map((el) => ({ ...el, id: localId('el') }))
     this.repo.upsert(copy)
     return copy
   }

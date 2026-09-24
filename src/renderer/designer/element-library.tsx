@@ -46,8 +46,8 @@ export function ElementLibrary(): JSX.Element {
       <div style={{ opacity: 0.7, fontSize: 12, margin: '4px 0' }}>添加元素</div>
       <Space direction="vertical" style={{ width: '100%' }}>
         <Button block onClick={() => add('text')}>文本</Button>
-        <div style={{ opacity: 0.5, fontSize: 12, margin: '6px 0' }}>
-          参数占位请在右栏“添加参数”，会自动放到画布上
+        <div style={{ opacity: 0.55, fontSize: 12, margin: '6px 0' }}>
+          参数在右栏“参数定义”中维护，文本中用 {'{{参数名称}}'} 引用
         </div>
         <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/bmp"
           style={{ display: 'none' }} onChange={onFile} />

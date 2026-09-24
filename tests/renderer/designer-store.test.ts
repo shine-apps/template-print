@@ -49,4 +49,31 @@ describe('designer store', () => {
     useDesignerStore.getState().addOrUpdateParam(p)
     expect(useDesignerStore.getState().doc.params[0].name).toBe('日期')
   })
+
+  it('renameParam 改名并同步文本 token（容忍括号内空白，替换后统一规范）', () => {
+    useDesignerStore.getState().addOrUpdateParam(createParamDef({ name: '姓名', type: 'text' }))
+    const el = createElement(
+      'text',
+      { text: '你好{{ 姓名 }}，敬礼：{{姓名}}' },
+      { x: 0, y: 0, w: 60, h: 8 }
+    )
+    useDesignerStore.getState().addElement(el)
+    useDesignerStore.getState().renameParam('姓名', createParamDef({ name: '收件人', type: 'text' }))
+    const doc = useDesignerStore.getState().doc
+    expect(doc.params.map((p) => p.name)).toEqual(['收件人'])
+    expect(doc.content.elements[0].type === 'text' && doc.content.elements[0].props.text).toBe(
+      '你好{{收件人}}，敬礼：{{收件人}}'
+    )
+  })
+
+  it('removeParam 仅删除定义，不动文本元素（token 打印时留空）', () => {
+    useDesignerStore.getState().addOrUpdateParam(createParamDef({ name: '姓名', type: 'text' }))
+    const el = createElement('text', { text: '你好{{姓名}}' }, { x: 0, y: 0, w: 60, h: 8 })
+    useDesignerStore.getState().addElement(el)
+    useDesignerStore.getState().removeParam('姓名')
+    const doc = useDesignerStore.getState().doc
+    expect(doc.params).toHaveLength(0)
+    expect(doc.content.elements).toHaveLength(1)
+    expect(doc.content.elements[0].type === 'text' && doc.content.elements[0].props.text).toBe('你好{{姓名}}')
+  })
 })

@@ -30,7 +30,7 @@ export function ElementLibrary(): JSX.Element {
     // 新模板可能尚未保存过：先确保模板在库（create 时已入库，故 id 可用）
     const { assetId } = await window.api.assets.import({
       templateId: doc.id,
-      sourcePath: (file as File & { path: string }).path
+      sourcePath: window.api.system.pathForFile(file)
     })
     const el = createElement(
       'image',

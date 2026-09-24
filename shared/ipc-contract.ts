@@ -111,6 +111,9 @@ export interface Api {
     run(): Promise<string>
     openDir(): Promise<void>
   }
+  system: {
+    pathForFile(file: File): string
+  }
   thumbUrl(path: string): Promise<string>
 }
 

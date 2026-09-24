@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from '../../shared/ipc-contract'
 
 const api = {
@@ -40,6 +40,10 @@ const api = {
   backups: {
     run: () => ipcRenderer.invoke(IPC.backupRun),
     openDir: () => ipcRenderer.invoke(IPC.backupOpen)
+  },
+  system: {
+    // File.path 自 Electron 32 起移除，渲染进程必须经此桥接（webUtils 只在主/preload 可用）
+    pathForFile: (file: File) => webUtils.getPathForFile(file)
   },
   thumbUrl: (path: string) => ipcRenderer.invoke(IPC.thumbFileUrl, path)
 }

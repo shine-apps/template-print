@@ -1,5 +1,6 @@
 import type { TemplateDocument } from '../print-core/template-model'
 import type { JobListItem } from '../db/repositories/job-repo'
+import type { AppSettingsDto, SettingsPatch } from './settings-dto'
 
 export interface PrinterInfoDto {
   name: string
@@ -52,7 +53,9 @@ export const IPC = {
   printSubmit: 'print:submit',
   jobsList: 'jobs:list',
   jobsGet: 'jobs:get',
-  thumbFileUrl: 'thumb:file-url'
+  thumbFileUrl: 'thumb:file-url',
+  settingsGet: 'settings:get',
+  settingsSet: 'settings:set'
 } as const
 
 export interface Api {
@@ -84,6 +87,10 @@ export interface Api {
   jobs: {
     list(filter?: { templateId?: string; from?: number; to?: number; keyword?: string }): Promise<JobListItem[]>
     get(id: string): Promise<JobListItem | null>
+  }
+  settings: {
+    get(): Promise<AppSettingsDto>
+    set(patch: SettingsPatch): Promise<AppSettingsDto>
   }
   thumbUrl(path: string): Promise<string>
 }

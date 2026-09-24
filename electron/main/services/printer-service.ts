@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { execFile } from 'node:child_process'
 import { IPC, type PrinterInfoDto, type PrinterRuntimeStatus, type SubmitPrintInput } from '../../../shared/ipc-contract'
-import { loadSettings, saveSettings, type AppSettings } from '../settings'
+import { loadSettings, saveSettings } from '../settings'
 import { createTemplate, createElement } from '../../../print-core/template-model'
 import type { PrintService } from './print-service'
 import type { Services } from '../ipc'
@@ -58,7 +58,9 @@ export class PrinterService {
     return loadSettings(this.dataDir).defaultPrinterName
   }
   setDefault(name: string): void {
-    saveSettings(this.dataDir, { defaultPrinterName: name } satisfies AppSettings)
+    // 先读后合并，避免覆盖 seededTemplatesVersion/historyRetentionDays 等新增字段
+    const s = loadSettings(this.dataDir)
+    saveSettings(this.dataDir, { ...s, defaultPrinterName: name })
   }
   testPage(name: string) {
     return this.print.submit(buildTestPageJob(name))

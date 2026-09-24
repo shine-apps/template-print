@@ -12,6 +12,7 @@ import { TemplateService } from './services/template-service'
 import { HistoryService } from './services/history-service'
 import { PrintService } from './services/print-service'
 import { PrinterService } from './services/printer-service'
+import { SettingsService } from './services/settings-service'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -39,12 +40,13 @@ app.whenReady().then(() => {
   const p = paths()
   const client = createDb(p.dbFile)
   runMigrations(client)
+  const settings = new SettingsService(p.dataDir)
   const assets = new AssetService(p.dataDir, new AssetRepository(client.db))
   const templates = new TemplateService(new TemplateRepository(client.db), assets)
   const history = new HistoryService(p.dataDir, new JobRepository(client.db))
   const print = new PrintService(p.dataDir, assets, history)
   const printers = new PrinterService(p.dataDir, print)
-  const services: Services = { assets, templates, history, print, printers }
+  const services: Services = { assets, templates, history, print, printers, settings }
   const win = createWindow()
   registerIpc(win, services)
   app.on('activate', () => {

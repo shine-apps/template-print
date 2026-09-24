@@ -31,6 +31,10 @@ const api = {
     list: (filter?: unknown) => ipcRenderer.invoke(IPC.jobsList, filter),
     get: (id: string) => ipcRenderer.invoke(IPC.jobsGet, id)
   },
+  settings: {
+    get: () => ipcRenderer.invoke(IPC.settingsGet),
+    set: (patch: unknown) => ipcRenderer.invoke(IPC.settingsSet, patch)
+  },
   thumbUrl: (path: string) => ipcRenderer.invoke(IPC.thumbFileUrl, path)
 }
 

@@ -67,7 +67,7 @@ export function PrintPage(): JSX.Element {
 
       const init: Record<string, string> = {}
       for (const p of loaded.params) {
-        init[p.key] = p.defaultValue === 'today' && p.type === 'date'
+        init[p.name] = p.defaultValue === 'today' && p.type === 'date'
           ? dayjs().format('YYYY-MM-DD')
           : p.defaultValue
       }
@@ -111,9 +111,9 @@ export function PrintPage(): JSX.Element {
   }
 
   function field(p: ParamDef): JSX.Element {
-    const v = values[p.key] ?? ''
+    const v = values[p.name] ?? ''
     if (p.type === 'textarea') {
-      return <Input.TextArea rows={2} value={v} onChange={(e) => setValue(p.key, e.target.value)} />
+      return <Input.TextArea rows={2} value={v} onChange={(e) => setValue(p.name, e.target.value)} />
     }
     if (p.type === 'date') {
       return (
@@ -121,7 +121,7 @@ export function PrintPage(): JSX.Element {
           style={{ width: '100%' }}
           format={p.dateFormat.replace(/yyyy/g, 'YYYY').replace(/dd/g, 'DD')}
           value={v ? dayjs(v) : null}
-          onChange={(d: Dayjs | null) => setValue(p.key, d ? d.format('YYYY-MM-DD') : '')}
+          onChange={(d: Dayjs | null) => setValue(p.name, d ? d.format('YYYY-MM-DD') : '')}
         />
       )
     }
@@ -130,11 +130,11 @@ export function PrintPage(): JSX.Element {
         <InputNumber
           style={{ width: '100%' }}
           value={v === '' ? null : Number(v)}
-          onChange={(n) => setValue(p.key, n === null ? '' : String(n))}
+          onChange={(n) => setValue(p.name, n === null ? '' : String(n))}
         />
       )
     }
-    return <Input value={v} maxLength={p.maxLength ?? undefined} onChange={(e) => setValue(p.key, e.target.value)} />
+    return <Input value={v} maxLength={p.maxLength ?? undefined} onChange={(e) => setValue(p.name, e.target.value)} />
   }
 
   function editLayout(): void {
@@ -255,10 +255,10 @@ export function PrintPage(): JSX.Element {
         <Form layout="vertical" size="small">
           {[...doc.params].sort((a, b) => a.order - b.order).map((p) => (
             <Form.Item
-              key={p.id}
-              label={p.label + (p.required ? ' *' : '')}
-              validateStatus={errors.includes(p.key) ? 'error' : ''}
-              help={errors.includes(p.key) ? '必填' : undefined}
+              key={p.name}
+              label={p.name + (p.required ? ' *' : '')}
+              validateStatus={errors.includes(p.name) ? 'error' : ''}
+              help={errors.includes(p.name) ? '必填' : undefined}
             >
               {field(p)}
             </Form.Item>

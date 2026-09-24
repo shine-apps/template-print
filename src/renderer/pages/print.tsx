@@ -20,6 +20,7 @@ export function PrintPage(): JSX.Element {
   const [printers, setPrinters] = useState<PrinterInfoDto[]>([])
   const [printerName, setPrinterName] = useState('')
   const [mode, setMode] = useState<'silent' | 'dialog'>('silent')
+  const [textOnly, setTextOnly] = useState(true)
   const [copies, setCopies] = useState(1)
   const [values, setValues] = useState<Record<string, string>>({})
   const [assetUrls, setAssetUrls] = useState<Record<string, string>>({})
@@ -64,6 +65,7 @@ export function PrintPage(): JSX.Element {
       setPrinters(prts)
       setPrinterName(loaded.printerName ?? defPrinter ?? prts.find((p) => p.isDefault)?.name ?? prts[0]?.name ?? '')
       setMode(loaded.printMode)
+      setTextOnly(loaded.textOnly)
 
       const init: Record<string, string> = {}
       for (const p of loaded.params) {
@@ -90,8 +92,8 @@ export function PrintPage(): JSX.Element {
     [doc, values]
   )
   const previewHtml = useMemo(
-    () => (doc ? renderPrintDocument(doc, evaluated, assetUrls) : ''),
-    [doc, evaluated, assetUrls]
+    () => (doc ? renderPrintDocument({ ...doc, textOnly }, evaluated, assetUrls) : ''),
+    [doc, textOnly, evaluated, assetUrls]
   )
 
   // 预览 iframe：按 96dpi 得到物理像素，再缩放到可用区域
@@ -139,7 +141,8 @@ export function PrintPage(): JSX.Element {
 
   function editLayout(): void {
     if (!doc) return
-    sessionDraft.doc = doc
+    // 携带打印侧开关的工作副本，避免往返设计器后选择丢失
+    sessionDraft.doc = { ...doc, printMode: mode, printerName, textOnly }
     sessionDraft.paramValues = values
     sessionDraft.returnToPrint = true
     sessionDraft.fromHistory = false
@@ -186,7 +189,7 @@ export function PrintPage(): JSX.Element {
   }
 
   async function submitNow(): Promise<void> {
-    const working: TemplateDocument = { ...doc!, printMode: mode, printerName }
+    const working: TemplateDocument = { ...doc!, printMode: mode, printerName, textOnly }
     let res
     try {
       res = await api.print.submit({ template: working, paramValues: values, printerName, copies, mode })
@@ -283,6 +286,13 @@ export function PrintPage(): JSX.Element {
             <span>份数</span>
             <InputNumber min={1} max={99} value={copies} onChange={(v) => setCopies(v ?? 1)} style={{ width: 70 }} />
           </Space>
+          <Space>
+            <span>仅打印文本</span>
+            <Switch checked={textOnly} onChange={setTextOnly} />
+          </Space>
+          <div style={{ color: '#999', fontSize: 12, lineHeight: 1.4 }}>
+            仅输出文字，不打印图片/图形/边框，适合已预印底图的纸张
+          </div>
           <Space>
             <Button type="primary" onClick={doPrint}>打印</Button>
             <Button onClick={editLayout}>调整版式</Button>

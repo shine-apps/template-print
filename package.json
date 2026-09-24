@@ -5,22 +5,20 @@
   "description": "可视化模板设计与打印桌面程序",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "powershell -ExecutionPolicy Bypass -File ./scripts/dev.ps1",
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "rebuild": "electron-builder install-app-deps",
-    "bin:node": "powershell -ExecutionPolicy Bypass -File ./scripts/switch-sqlite.ps1 node",
-    "bin:electron": "powershell -ExecutionPolicy Bypass -File ./scripts/switch-sqlite.ps1 electron",
     "dist": "powershell -ExecutionPolicy Bypass -File ./scripts/dist.ps1"
   },
   "dependencies": {
     "@ant-design/icons": "^5.5.1",
     "adm-zip": "^0.5.18",
     "antd": "^5.21.0",
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^13.0.3",
     "dayjs": "^1.11.13",
     "drizzle-orm": "^0.33.0",
     "konva": "^9.3.16",
@@ -35,20 +33,18 @@
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
     "@types/better-sqlite3": "^7.6.11",
-    "@types/node": "^20.16.5",
+    "@types/node": "^24.9.0",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
-    "electron": "^31.4.0",
-    "electron-builder": "^25.0.5",
-    "electron-vite": "^2.3.0",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
     "typescript": "^5.5.4",
-    "vite": "^5.4.6",
+    "vite": "^7.3.6",
     "vitest": "^2.1.1"
   },
   "allowScripts": {
-    "better-sqlite3": true,
-    "electron": true,
     "esbuild": true
   }
 }

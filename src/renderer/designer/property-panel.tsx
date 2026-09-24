@@ -1,7 +1,10 @@
-import { Button, ColorPicker, InputNumber, Input, Select, Space, Switch, Divider } from 'antd'
+import { Button, ColorPicker, InputNumber, Input, Select, Segmented, Space, Switch, Divider } from 'antd'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { useDesignerStore } from '../store/designer-store'
 import { mmToPt, ptToMm } from '../../../shared/units'
 import { ParamManager } from './param-manager'
+import { getFonts } from '../fonts'
+import type { FontListDto } from '../../../shared/ipc-contract'
 
 export function PropertyPanel({ onCommitted }: { onCommitted: () => void }): JSX.Element {
   const doc = useDesignerStore((s) => s.doc)
@@ -9,6 +12,9 @@ export function PropertyPanel({ onCommitted }: { onCommitted: () => void }): JSX
   const updateGeometry = useDesignerStore((s) => s.updateGeometry)
   const updateProps = useDesignerStore((s) => s.updateProps)
   const el = doc.content.elements.find((e) => e.id === selectedId)
+
+  const [fonts, setFonts] = useState<FontListDto | null>(null)
+  useEffect(() => { void getFonts().then(setFonts) }, [])
 
   function geo(patch: Partial<{ x: number; y: number; w: number; h: number; locked: boolean; rotation: number }>): void {
     if (el) { updateGeometry(el.id, patch); onCommitted() }
@@ -43,38 +49,65 @@ export function PropertyPanel({ onCommitted }: { onCommitted: () => void }): JSX
             锁定 <Switch size="small" checked={el.locked} onChange={(v) => geo({ locked: v })} />
           </Space>
 
-          {el.type === 'text' && (
-            <>
-              <Input.TextArea rows={2} value={el.props.text} onChange={(e) => props({ text: e.target.value })} />
-              {doc.params.length > 0 && (
-                <div style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>插入参数到文本末尾</div>
-                  <Select size="small" style={{ width: '100%' }} placeholder="选择参数"
+          {el.type === 'text' && (() => {
+            const tp = el.props
+            const fontOptions = [
+              { label: '系统默认', options: [{ value: '', label: '系统默认（推荐）' }] },
+              { label: '常用字体', options: (fonts?.common ?? []).map((f) => ({ value: f, label: f })) },
+              {
+                label: '全部字体',
+                options: (fonts?.all ?? []).filter((f) => !(fonts?.common ?? []).includes(f)).map((f) => ({ value: f, label: f }))
+              }
+            ]
+            const fontStyleOf = (family: string): CSSProperties =>
+              family === '' ? {} : { fontFamily: `"${family}"` }
+            return (
+              <>
+                <Segmented size="small" block value={tp.direction}
+                  options={[{ value: 'horizontal', label: '横排' }, { value: 'vertical', label: '竖排' }]}
+                  onChange={(v) => props({ direction: v as 'horizontal' | 'vertical' })} />
+                <Input.TextArea rows={2} value={tp.text} onChange={(e) => props({ text: e.target.value })} />
+                {doc.params.length > 0 && (
+                  <Select size="small" style={{ width: '100%' }} placeholder="插入参数到文本末尾"
                     options={doc.params.map((p) => ({ value: p.name, label: `{{${p.name}}}` }))}
                     onChange={(name) => {
                       if (!name) return
-                      const cur = el.type === 'text' ? el.props.text : ''
-                      updateProps(el.id, { text: `${cur}${cur && !/\s$/.test(cur) ? ' ' : ''}{{${name}}}` })
+                      props({ text: `${tp.text}${tp.text && !/\s$/.test(tp.text) ? ' ' : ''}{{${name}}}` })
                     }} />
-                </div>
-              )}
-              <Space wrap>
-                字号
-                <InputNumber size="small" style={{ width: 90 }} min={1}
-                  value={Number(mmToPt(el.props.fontSizeMm).toFixed(1))} addonAfter="pt"
-                  onChange={(v) => props({ fontSizeMm: ptToMm(Math.max(1, v ?? 1)) })} />
-                <Button size="small" type={el.props.bold ? 'primary' : 'default'}
-                  onClick={() => props({ bold: !el.props.bold })}>B</Button>
-                <Button size="small" type={el.props.italic ? 'primary' : 'default'}
-                  onClick={() => props({ italic: !el.props.italic })}>I</Button>
-                <Select size="small" style={{ width: 80 }} value={el.props.align}
-                  onChange={(v) => props({ align: v })}
-                  options={[{ value: 'left', label: '左' }, { value: 'center', label: '中' }, { value: 'right', label: '右' }]} />
-              </Space>
-              颜色 <ColorPicker size="small" value={el.props.color}
-                onChange={(c) => props({ color: c.toHexString() })} />
-            </>
-          )}
+                )}
+                <Select size="small" showSearch style={{ width: '100%' }} value={tp.fontFamily}
+                  optionFilterProp="label" options={fontOptions}
+                  optionRender={(o) => (
+                    <span style={fontStyleOf(o.value === undefined ? '' : String(o.value))}>{o.label}</span>
+                  )}
+                  onChange={(v) => props({ fontFamily: v })} />
+                <Space wrap>
+                  字号
+                  <InputNumber size="small" style={{ width: 90 }} min={1}
+                    value={Number(mmToPt(tp.fontSizeMm).toFixed(1))} addonAfter="pt"
+                    onChange={(v) => props({ fontSizeMm: ptToMm(Math.max(1, v ?? 1)) })} />
+                  <Button size="small" type={tp.bold ? 'primary' : 'default'}
+                    onClick={() => props({ bold: !tp.bold })}><b>B</b></Button>
+                  <Button size="small" type={tp.italic ? 'primary' : 'default'}
+                    onClick={() => props({ italic: !tp.italic })}><i>I</i></Button>
+                  <Button size="small" type={tp.underline ? 'primary' : 'default'}
+                    onClick={() => props({ underline: !tp.underline })} style={{ textDecoration: 'underline' }}>U</Button>
+                  <Select size="small" style={{ width: 96 }} value={tp.align}
+                    onChange={(v) => props({ align: v })}
+                    options={tp.direction === 'vertical'
+                      ? [{ value: 'left', label: '右对齐' }, { value: 'center', label: '居中' }, { value: 'right', label: '左对齐' }]
+                      : [{ value: 'left', label: '左对齐' }, { value: 'center', label: '居中' }, { value: 'right', label: '右对齐' }]} />
+                </Space>
+                <Space wrap>
+                  行高
+                  <InputNumber size="small" style={{ width: 90 }} min={0.5} step={0.1}
+                    value={tp.lineHeight} onChange={(v) => props({ lineHeight: v ?? 1.2 })} />
+                  颜色 <ColorPicker size="small" value={tp.color}
+                    onChange={(c) => props({ color: c.toHexString() })} />
+                </Space>
+              </>
+            )
+          })()}
 
           {el.type === 'shape' && (
             <>

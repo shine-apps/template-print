@@ -8,12 +8,15 @@ import { DesignerCanvas } from '../designer/canvas'
 import { ElementLibrary } from '../designer/element-library'
 import { LayersPanel } from '../designer/layers-panel'
 import { PropertyPanel } from '../designer/property-panel'
+import { NewTemplateModal } from '../components/new-template-modal'
 import { TemplateDocumentSchema } from '../../../print-core/template-model'
 
 export function DesignerPage(): JSX.Element {
   const { id } = useParams()
   const nav = useNavigate()
   const [loading, setLoading] = useState(true)
+  // 无 sessionDraft 且无模板 id（直接点「模板设计」菜单进入）时立即弹新建模板窗
+  const [createOpen, setCreateOpen] = useState(false)
   const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([])
   const doc = useDesignerStore((s) => s.doc)
   const mode = useDesignerStore((s) => s.mode)
@@ -32,7 +35,8 @@ export function DesignerPage(): JSX.Element {
         if (!got) { message.error('模板不存在'); nav('/templates'); return }
         load(got, 'template')
       } else {
-        nav('/templates')
+        // 既无打印会话草稿也无模板 id：弹出新建模板窗（不跳走，由弹窗决定去向）
+        setCreateOpen(true)
         return
       }
       setLoading(false)
@@ -66,7 +70,24 @@ export function DesignerPage(): JSX.Element {
     nav('/print')
   }
 
-  if (loading) return <Spin style={{ display: 'block', marginTop: 80 }} />
+  const createModal = (
+    <NewTemplateModal
+      open={createOpen}
+      onClose={() => nav('/templates')}
+      onCreated={(newId) => {
+        // 创建成功：关弹窗并进入该模板的设计器（replace，避免后退又回到无 id 状态再次弹窗）
+        setCreateOpen(false)
+        nav(`/designer/${newId}`, { replace: true })
+      }}
+    />
+  )
+
+  if (loading) return (
+    <>
+      {createModal}
+      <Spin style={{ display: 'block', marginTop: 80 }} />
+    </>
+  )
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
@@ -108,6 +129,7 @@ export function DesignerPage(): JSX.Element {
       <div style={{ width: 240, background: '#fff', borderLeft: '1px solid #eee', overflow: 'auto' }}>
         <PropertyPanel onCommitted={commit} />
       </div>
+      {createModal}
     </div>
   )
 }

@@ -14,6 +14,7 @@ function Shell(): JSX.Element {
   const loc = useLocation()
   const selected = loc.pathname.startsWith('/history') ? '/history'
     : loc.pathname.startsWith('/settings') ? '/settings'
+    : loc.pathname.startsWith('/designer') ? '/designer'
     : '/templates'
   return (
     <Layout style={{ height: '100vh' }}>
@@ -26,6 +27,7 @@ function Shell(): JSX.Element {
           onClick={(e) => nav(e.key)}
           items={[
             { key: '/templates', label: '模板列表' },
+            { key: '/designer', label: '模板设计' },
             { key: '/history', label: '打印历史' },
             { key: '/settings', label: '打印机设置' }
           ]}

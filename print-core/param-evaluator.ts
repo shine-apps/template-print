@@ -51,14 +51,14 @@ export function evaluateParams(
   const errors: string[] = []
 
   for (const def of defs) {
-    let raw = input[def.key]
+    let raw = input[def.name]
     if (raw === undefined) {
       raw = def.defaultValue === 'today' && def.type === 'date'
         ? dayjs(now).format('YYYY-MM-DD')
         : def.defaultValue
     }
 
-    if (raw.trim() === '' && def.required) errors.push(def.key)
+    if (raw.trim() === '' && def.required) errors.push(def.name)
 
     let value: string
     switch (def.type) {
@@ -71,14 +71,14 @@ export function evaluateParams(
       default:
         value = raw
     }
-    out[def.key] = applyEmpty(value, def.printOnEmpty)
+    out[def.name] = applyEmpty(value, def.printOnEmpty)
   }
 
   if (errors.length > 0) out.__errors = errors
   return out
 }
 
-/** 替换表达式中的 {{key}}（通用工具，保留供未来场景使用） */
+/** 替换文本中的 {{参数名称}}（名称允许中文等任意非大括号字符）；未定义名称替换为空串 */
 export function interpolate(expr: string, values: Record<string, string>): string {
-  return expr.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, key: string) => values[key] ?? '')
+  return expr.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, name: string) => values[name.trim()] ?? '')
 }

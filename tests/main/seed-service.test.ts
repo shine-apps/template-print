@@ -35,10 +35,23 @@ describe('seedSpecs / SeedService', () => {
       [SEED_PREFIX + 'cert', SEED_PREFIX + 'label', SEED_PREFIX + 'receipt'].sort()
     )
     expect(specs.find((s) => s.id === SEED_PREFIX + 'receipt')?.paper.widthMm).toBe(80)
-    expect(specs.find((s) => s.id === SEED_PREFIX + 'cert')?.params.map((p) => p.key)).toEqual([
-      'name',
-      'date'
+    expect(specs.find((s) => s.id === SEED_PREFIX + 'cert')?.params.map((p) => p.name)).toEqual([
+      '姓名',
+      '日期'
     ])
+    expect(specs.find((s) => s.id === SEED_PREFIX + 'receipt')?.params.map((p) => p.name)).toEqual([
+      '商品/客户',
+      '金额'
+    ])
+    expect(specs.find((s) => s.id === SEED_PREFIX + 'label')?.params.map((p) => p.name)).toEqual([
+      '品名',
+      '价格'
+    ])
+    // 参数不再是画布元素：全部规格均无 param 元素，且文本中含 {{名称}} token
+    for (const s of specs) {
+      expect(s.content.elements.some((e) => e.type === 'param')).toBe(false)
+      expect(s.content.elements.some((e) => e.type === 'text' && e.props.text.includes('{{'))).toBe(true)
+    }
   })
 
   it('首次播种插入 3 个；第二次幂等不重复', async () => {

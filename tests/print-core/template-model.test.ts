@@ -9,10 +9,9 @@ import {
 describe('模板模型校验', () => {
   it('合法模板通过校验', () => {
     const tpl = createTemplate('t1', '测试', { widthMm: 210, heightMm: 297 })
-    tpl.params.push(createParamDef({ key: 'name', label: '姓名', type: 'text' }))
+    tpl.params.push(createParamDef({ name: '姓名', type: 'text' }))
     tpl.content.elements.push(
-      createElement('text', { text: '标题' }, { x: 10, y: 10, w: 80, h: 10 }),
-      createElement('param', { paramId: 'name' }, { x: 10, y: 30, w: 60, h: 8 })
+      createElement('text', { text: '姓名：{{姓名}}' }, { x: 10, y: 10, w: 80, h: 10 })
     )
     expect(() => TemplateDocumentSchema.parse(tpl)).not.toThrow()
   })
@@ -24,10 +23,11 @@ describe('模板模型校验', () => {
     expect(() => TemplateDocumentSchema.parse(bad)).toThrow()
   })
 
-  it('参数 key 重复被拒绝', () => {
-    const tpl = createTemplate('t3', '参数重复', { widthMm: 40, heightMm: 30 })
-    tpl.params.push(createParamDef({ key: 'date', label: '日期', type: 'date' }))
-    tpl.params.push(createParamDef({ key: 'date', label: '日期2', type: 'date' }))
-    expect(() => TemplateDocumentSchema.parse(tpl)).toThrow(/重复|unique/i)
+  it('参数名称模板内唯一；含大括号非法', () => {
+    const d = createTemplate('t', 'x', { widthMm: 40, heightMm: 30 })
+    d.params.push(createParamDef({ name: '姓名', type: 'text' }))
+    d.params.push(createParamDef({ name: '姓名', type: 'text', order: 1 }))
+    expect(TemplateDocumentSchema.safeParse(d).success).toBe(false)
+    expect(() => createParamDef({ name: '坏{名称', type: 'text' })).toThrow()
   })
 })

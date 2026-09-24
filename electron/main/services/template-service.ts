@@ -12,6 +12,7 @@ import {
   type TemplateElement
 } from '../../../print-core/template-model'
 import { TemplateRepository } from '../../../db/repositories/template-repo'
+import { migrateDocument } from '../../../print-core/migrate'
 import type { AssetService } from './asset-service'
 import type { Services } from '../ipc'
 
@@ -89,7 +90,8 @@ export class TemplateService {
     const zip = new AdmZip(sourcePath)
     const entry = zip.getEntry('template.json')
     if (!entry) throw new Error('不是有效的 .tplx 文件（缺少 template.json）')
-    const parsed = TemplateDocumentSchema.parse(JSON.parse(entry.getData().toString('utf-8')))
+    // 兼容 v1 .tplx：先做 v1→v2 读时迁移再校验
+    const parsed = TemplateDocumentSchema.parse(migrateDocument(JSON.parse(entry.getData().toString('utf-8'))))
 
     const now = Date.now()
     const newDoc: TemplateDocument = TemplateDocumentSchema.parse({

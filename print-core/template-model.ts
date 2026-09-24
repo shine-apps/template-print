@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const CONTENT_VERSION = 1
+export const CONTENT_VERSION = 2
 
 // ---------- 几何（单位 mm） ----------
 const GeometrySchema = z.object({
@@ -30,20 +30,6 @@ export const TextElementSchema = GeometrySchema.extend({
   })
 })
 
-export const ParamElementSchema = GeometrySchema.extend({
-  id: z.string().min(1),
-  type: z.literal('param'),
-  props: z.object({
-    paramId: z.string().min(1),
-    fontFamily: z.string().default('Microsoft YaHei'),
-    fontSizeMm: z.number().positive().default(5),
-    bold: z.boolean().default(false),
-    align: z.enum(['left', 'center', 'right']).default('left'),
-    color: z.string().default('#000000'),
-    autoFit: z.boolean().default(true)
-  })
-})
-
 export const ImageElementSchema = GeometrySchema.extend({
   id: z.string().min(1),
   type: z.literal('image'),
@@ -67,7 +53,6 @@ export const ShapeElementSchema = GeometrySchema.extend({
 
 export const ElementSchema = z.discriminatedUnion('type', [
   TextElementSchema,
-  ParamElementSchema,
   ImageElementSchema,
   ShapeElementSchema
 ])
@@ -79,12 +64,12 @@ export const ParamTypeSchema = z.enum(['text', 'textarea', 'date', 'number'])
 export type ParamType = z.infer<typeof ParamTypeSchema>
 
 export const ParamDefSchema = z.object({
-  id: z.string().min(1),
-  key: z
+  name: z
     .string()
-    .min(1)
-    .regex(/^[A-Za-z][A-Za-z0-9_]*$/, 'key 必须以字母开头且仅含字母数字下划线'),
-  label: z.string().min(1),
+    .trim()
+    .min(1, '参数名称不能为空')
+    .max(30, '参数名称最长 30 字符')
+    .refine((n) => !/[{}]/.test(n) && !/[\r\n]/.test(n), '参数名称不能包含 { } 或换行'),
   type: ParamTypeSchema,
   required: z.boolean().default(true),
   defaultValue: z.string().default(''),
@@ -140,27 +125,14 @@ export const TemplateDocumentSchema = z
   .superRefine((doc, ctx) => {
     const seen = new Set<string>()
     doc.params.forEach((p, i) => {
-      if (seen.has(p.key)) {
+      if (seen.has(p.name)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['params', i, 'key'],
-          message: `参数 key 重复: ${p.key}`
+          path: ['params', i, 'name'],
+          message: `参数名称重复: ${p.name}`
         })
       }
-      seen.add(p.key)
-    })
-    // param 元素引用的 paramId 必须存在
-    doc.content.elements.forEach((el, i) => {
-      if (el.type === 'param' && !doc.params.some((p) => p.id === el.props.paramId)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['content', 'elements', i],
-          message: `参数元素引用了不存在的参数: ${el.props.paramId}`
-        })
-      }
-      if (el.type === 'image') {
-        // assetId 存在性由业务层（AssetService）校验，模型层不查库
-      }
+      seen.add(p.name)
     })
   })
 export type TemplateDocument = z.infer<typeof TemplateDocumentSchema>
@@ -217,10 +189,11 @@ export function createElement(
 }
 
 export function createParamDef(
-  input: Pick<ParamDef, 'key' | 'label' | 'type'> & Partial<ParamDef>
+  input: Pick<ParamDef, 'name' | 'type'> & Partial<ParamDef>
 ): ParamDef {
   return ParamDefSchema.parse({
-    id: input.key,
+    name: input.name,
+    type: input.type,
     required: true,
     defaultValue: '',
     dateFormat: 'yyyy-MM-dd',

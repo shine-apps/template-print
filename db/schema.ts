@@ -14,15 +14,12 @@ export const templates = sqliteTable('templates', {
   updatedAt: integer('updated_at').notNull()
 })
 
-// 勘误：参数 id 恒等于 key（如 'name'），不同模板间必然重复，
-// 因此主键采用 (template_id, id) 复合键，唯一性收敛到单模板内。
+// 参数名称在单模板内唯一，主键 (template_id, name)
 export const templateParams = sqliteTable('template_params', {
-  id: text('id').notNull(),
   templateId: text('template_id')
     .notNull()
     .references(() => templates.id, { onDelete: 'cascade' }),
-  key: text('key').notNull(),
-  label: text('label').notNull(),
+  name: text('name').notNull(),
   type: text('type').notNull(),
   required: integer('required', { mode: 'boolean' }).notNull().default(true),
   defaultValue: text('default_value').notNull().default(''),
@@ -35,7 +32,7 @@ export const templateParams = sqliteTable('template_params', {
   printOnEmpty: text('print_on_empty').notNull().default('blank'),
   order: integer('sort_order').notNull().default(0)
 }, (table) => ({
-  pk: primaryKey({ columns: [table.templateId, table.id] })
+  pk: primaryKey({ columns: [table.templateId, table.name] })
 }))
 
 export const assets = sqliteTable('assets', {

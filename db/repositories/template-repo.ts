@@ -1,7 +1,7 @@
 import { eq, like, and, desc, type SQL } from 'drizzle-orm'
 import { templates, templateParams } from '../schema'
 import type { DrizzleDb } from '../client'
-import { TemplateDocumentSchema, ParamDefSchema, type TemplateDocument, type ParamDef } from '../../print-core/template-model'
+import { TemplateDocumentSchema, type TemplateDocument } from '../../print-core/template-model'
 
 interface TemplateRow {
   id: string
@@ -18,9 +18,7 @@ interface TemplateRow {
 }
 
 interface ParamRow {
-  id: string
-  key: string
-  label: string
+  name: string
   type: string
   required: number | boolean
   defaultValue: string
@@ -67,7 +65,7 @@ export class TemplateRepository {
       tx.delete(templateParams).where(eq(templateParams.templateId, doc.id)).run()
       for (const p of doc.params) {
         tx.insert(templateParams).values({
-          id: p.id, templateId: doc.id, key: p.key, label: p.label, type: p.type,
+          templateId: doc.id, name: p.name, type: p.type,
           required: p.required, defaultValue: p.defaultValue, dateFormat: p.dateFormat,
           maxLength: p.maxLength, min: p.min, max: p.max, decimals: p.decimals,
           thousandsSeparator: p.thousandsSeparator, printOnEmpty: p.printOnEmpty, order: p.order
@@ -77,22 +75,21 @@ export class TemplateRepository {
   }
 
   private hydrate(row: TemplateRow, params: ParamRow[]): TemplateDocument {
-    // Drizzle 查询返回 JS 属性名（camelCase），JSON 模式列已自动反序列化
+    // 启动迁移已保证库内为 v2；Drizzle 查询返回 JS 属性名（camelCase），JSON 模式列已自动反序列化
     return TemplateDocumentSchema.parse({
       id: row.id, name: row.name, category: row.category, paper: row.paper,
       content: row.content, printMode: row.printMode, printerName: row.printerName,
-      isBuiltin: !!row.isBuiltin, version: row.version,
+      isBuiltin: !!row.isBuiltin, version: 2,
       createdAt: row.createdAt, updatedAt: row.updatedAt,
       params: params
-        .map((pr) =>
-          ParamDefSchema.parse({
-            id: pr.id, key: pr.key, label: pr.label, type: pr.type,
-            required: !!pr.required, defaultValue: pr.defaultValue, dateFormat: pr.dateFormat,
-            maxLength: pr.maxLength, min: pr.min, max: pr.max, decimals: pr.decimals,
-            thousandsSeparator: !!pr.thousandsSeparator, printOnEmpty: pr.printOnEmpty, order: pr.order
-          })
-        )
-        .sort((a: ParamDef, b: ParamDef) => a.order - b.order)
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((pr) => ({
+          name: pr.name, type: pr.type, required: !!pr.required, defaultValue: pr.defaultValue,
+          dateFormat: pr.dateFormat, maxLength: pr.maxLength, min: pr.min, max: pr.max,
+          decimals: pr.decimals, thousandsSeparator: !!pr.thousandsSeparator,
+          printOnEmpty: pr.printOnEmpty, order: pr.order
+        }))
     })
   }
 

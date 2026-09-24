@@ -29,27 +29,51 @@ function geoStyle(el: TemplateElement): string {
     .join(';')
 }
 
+/**
+ * 文本分段渲染：普通片段做 HTML 转义；{{参数名称}} token 用求值后的值替换（同样转义），
+ * 值为空值横线标记时渲染为下划线片段。未知名替换为空串。
+ */
+function renderTextHtml(
+  p: {
+    text: string
+    fontFamily: string
+    fontSizeMm: number
+    bold: boolean
+    italic: boolean
+    align: string
+    color: string
+    lineHeight: number
+  },
+  values: Record<string, string>
+): string {
+  const re = /\{\{\s*([^{}]+?)\s*\}\}/g
+  const parts: string[] = []
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(p.text))) {
+    parts.push(esc(p.text.slice(last, m.index)))
+    const v = values[m[1].trim()] ?? ''
+    parts.push(
+      v === EMPTY_LINE_TOKEN
+        ? '<span style="display:inline-block;min-width:15mm;border-bottom:0.3mm solid #000">&nbsp;</span>'
+        : esc(v)
+    )
+    last = m.index + m[0].length
+  }
+  parts.push(esc(p.text.slice(last)))
+  return (
+    `<div style="font-family:'${esc(p.fontFamily)}';font-size:${p.fontSizeMm}mm;` +
+    `font-weight:${p.bold ? 'bold' : 'normal'};font-style:${p.italic ? 'italic' : 'normal'};` +
+    `text-align:${p.align};color:${p.color};line-height:${p.lineHeight};` +
+    `white-space:pre-wrap;word-break:break-word;overflow:hidden">${parts.join('')}</div>`
+  )
+}
+
 function renderElement(el: TemplateElement, values: Record<string, string>, assetUrls: Record<string, string>): string {
   const style = geoStyle(el)
   switch (el.type) {
-    case 'text': {
-      const p = el.props
-      return `<div style="${style};font-family:'${esc(p.fontFamily)}';font-size:${p.fontSizeMm}mm;` +
-        `font-weight:${p.bold ? 'bold' : 'normal'};font-style:${p.italic ? 'italic' : 'normal'};` +
-        `text-align:${p.align};color:${p.color};line-height:${p.lineHeight};` +
-        `display:flex;align-items:flex-start;justify-content:${p.align === 'center' ? 'center' : p.align === 'right' ? 'flex-end' : 'flex-start'}">` +
-        `${esc(p.text)}</div>`
-    }
-    case 'param': {
-      const p = el.props
-      const raw = values[p.paramId] ?? ''
-      if (raw === EMPTY_LINE_TOKEN) {
-        return `<div style="${style};border-bottom:0.3mm solid #000"></div>`
-      }
-      return `<div style="${style};font-family:'${esc(p.fontFamily)}';font-size:${p.fontSizeMm}mm;` +
-        `font-weight:${p.bold ? 'bold' : 'normal'};text-align:${p.align};color:${p.color};` +
-        `overflow:hidden;white-space:pre-wrap;word-break:break-word">${esc(raw)}</div>`
-    }
+    case 'text':
+      return `<div style="${style}">${renderTextHtml(el.props, values)}</div>`
     case 'image': {
       const p = el.props
       const src = assetUrls[p.assetId] ?? ''

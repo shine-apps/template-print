@@ -28,31 +28,6 @@ function t(
   return { type: 'text', ...geo(id, x, y, w, h, z), props } as TemplateElement
 }
 
-function param(
-  id: string,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  z: number,
-  key: string,
-  fontSizeMm = 4
-): TemplateElement {
-  return {
-    type: 'param',
-    ...geo(id, x, y, w, h, z),
-    props: {
-      paramId: key,
-      fontFamily: 'Microsoft YaHei',
-      fontSizeMm,
-      bold: false,
-      align: 'left',
-      color: '#000000',
-      autoFit: true
-    }
-  } as TemplateElement
-}
-
 function rect(
   id: string,
   x: number,
@@ -80,17 +55,17 @@ export function seedSpecs(): TemplateDocument[] {
     category: '示例',
     paper: { widthMm: 210, heightMm: 297, orientation: 'portrait', marginMm: { t: 0, r: 0, b: 0, l: 0 } },
     params: [
-      createParamDef({ key: 'name', label: '姓名', type: 'text', required: true, order: 0 }),
-      createParamDef({ key: 'date', label: '日期', type: 'date', required: false, defaultValue: 'today', order: 1 })
+      createParamDef({ name: '姓名', type: 'text', required: true, order: 0 }),
+      createParamDef({ name: '日期', type: 'date', required: false, defaultValue: 'today', order: 1 })
     ],
     content: {
       elements: [
         rect('box', 10, 10, 190, 277, 0, 0.6),
         t('title', 30, 40, 150, 16, 2, { text: '荣 誉 证 书', fontSizeMm: 12, bold: true, align: 'center' }),
         t('line1', 30, 110, 150, 8, 2, { text: '兹证明', align: 'left' }),
-        param('p_name', 60, 130, 90, 8, 2, 'name', 6),
+        t('p_name', 60, 130, 90, 8, 2, { text: '{{姓名}}', fontSizeMm: 6, bold: true }),
         t('line2', 30, 160, 150, 8, 2, { text: '在工作中表现优异，特发此证，以资鼓励。' }),
-        param('p_date', 110, 250, 80, 8, 2, 'date', 4)
+        t('p_date', 110, 250, 80, 8, 2, { text: '{{日期}}', fontSizeMm: 4 })
       ]
     },
     createdAt: now,
@@ -104,15 +79,15 @@ export function seedSpecs(): TemplateDocument[] {
     category: '示例',
     paper: { widthMm: 80, heightMm: 200, orientation: 'portrait', marginMm: { t: 0, r: 0, b: 0, l: 0 } },
     params: [
-      createParamDef({ key: 'name', label: '商品/客户', type: 'text', order: 0 }),
-      createParamDef({ key: 'amount', label: '金额', type: 'number', thousandsSeparator: true, order: 1 })
+      createParamDef({ name: '商品/客户', type: 'text', order: 0 }),
+      createParamDef({ name: '金额', type: 'number', thousandsSeparator: true, order: 1 })
     ],
     content: {
       elements: [
         rect('box', 2, 2, 76, 196, 0),
         t('title', 5, 6, 70, 8, 2, { text: '收银小票', fontSizeMm: 5, bold: true, align: 'center' }),
-        param('p_name', 5, 22, 70, 6, 2, 'name'),
-        param('p_amt', 5, 32, 70, 6, 2, 'amount'),
+        t('p_name', 5, 22, 70, 6, 2, { text: '商品：{{商品/客户}}' }),
+        t('p_amt', 5, 32, 70, 6, 2, { text: '金额：￥{{金额}}' }),
         t('tip', 5, 180, 70, 6, 2, { text: '谢谢惠顾', align: 'center', color: '#666666' })
       ]
     },
@@ -127,14 +102,14 @@ export function seedSpecs(): TemplateDocument[] {
     category: '示例',
     paper: { widthMm: 40, heightMm: 30, orientation: 'portrait', marginMm: { t: 0, r: 0, b: 0, l: 0 } },
     params: [
-      createParamDef({ key: 'name', label: '品名', type: 'text', required: true, order: 0 }),
-      createParamDef({ key: 'price', label: '价格', type: 'number', decimals: 2, order: 1 })
+      createParamDef({ name: '品名', type: 'text', required: true, order: 0 }),
+      createParamDef({ name: '价格', type: 'number', decimals: 2, order: 1 })
     ],
     content: {
       elements: [
         rect('box', 1, 1, 38, 28, 0),
-        param('p_name', 2, 3, 36, 8, 2, 'name', 4.5),
-        param('p_price', 2, 16, 36, 8, 2, 'price', 5)
+        t('p_name', 2, 3, 36, 8, 2, { text: '品名：{{品名}}', fontSizeMm: 4.5 }),
+        t('p_price', 2, 16, 36, 8, 2, { text: '价格：￥{{价格}}', fontSizeMm: 5 })
       ]
     },
     createdAt: now,

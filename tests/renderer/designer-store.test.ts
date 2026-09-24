@@ -31,21 +31,22 @@ describe('designer store', () => {
     expect(useDesignerStore.getState().doc.content.elements[0].x).toBe(50)
   })
 
-  it('removeElement 同时清理引用了该参数的 param 定义（由调用方传入联动逻辑）——store 只删元素', () => {
-    const p = createParamDef({ key: 'name', label: '姓名', type: 'text' })
+  it('removeElement 只删文本元素，不动参数定义（参数不再是画布元素）', () => {
+    const p = createParamDef({ name: '姓名', type: 'text' })
     const { doc } = useDesignerStore.getState()
     doc.params.push(p)
-    const el = createElement('param', { paramId: p.id }, { x: 0, y: 0, w: 20, h: 6 })
+    const el = createElement('text', { text: '你好{{姓名}}' }, { x: 0, y: 0, w: 20, h: 6 })
     useDesignerStore.getState().addElement(el)
     useDesignerStore.getState().commit()
     useDesignerStore.getState().removeElement(el.id)
     useDesignerStore.getState().commit()
     expect(useDesignerStore.getState().doc.content.elements.length).toBe(0)
+    expect(useDesignerStore.getState().doc.params).toHaveLength(1)
   })
 
   it('addOrUpdateParam 新增参数定义', () => {
-    const p = createParamDef({ key: 'date', label: '日期', type: 'date' })
+    const p = createParamDef({ name: '日期', type: 'date' })
     useDesignerStore.getState().addOrUpdateParam(p)
-    expect(useDesignerStore.getState().doc.params[0].key).toBe('date')
+    expect(useDesignerStore.getState().doc.params[0].name).toBe('日期')
   })
 })

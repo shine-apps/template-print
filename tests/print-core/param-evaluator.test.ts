@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createParamDef } from '../../print-core/template-model'
-import { evaluateParams, formatDate, formatNumber, applyEmpty } from '../../print-core/param-evaluator'
+import { evaluateParams, formatDate, formatNumber, applyEmpty, interpolate } from '../../print-core/param-evaluator'
 
 describe('参数求值', () => {
   it('日期按 dateFormat 格式化', () => {
@@ -16,18 +16,22 @@ describe('参数求值', () => {
   })
   it('evaluateParams 汇总各类型默认值与 today', () => {
     const defs = [
-      createParamDef({ key: 'name', label: '姓名', type: 'text', defaultValue: '张三' }),
-      createParamDef({ key: 'date', label: '日期', type: 'date', defaultValue: 'today' }),
-      createParamDef({ key: 'amount', label: '金额', type: 'number', decimals: 2, thousandsSeparator: true })
+      createParamDef({ name: '姓名', type: 'text', defaultValue: '张三' }),
+      createParamDef({ name: '日期', type: 'date', defaultValue: 'today' }),
+      createParamDef({ name: '金额', type: 'number', decimals: 2, thousandsSeparator: true })
     ]
-    const out = evaluateParams(defs, { amount: '99.9' }, new Date(2026, 8, 23))
-    expect(out.name).toBe('张三')
-    expect(out.date).toBe('2026-09-23')
-    expect(out.amount).toBe('99.90')
+    const out = evaluateParams(defs, { 金额: '99.9' }, new Date(2026, 8, 23))
+    expect(out['姓名']).toBe('张三')
+    expect(out['日期']).toBe('2026-09-23')
+    expect(out['金额']).toBe('99.90')
   })
-  it('必填校验返回错误键集合', () => {
-    const defs = [createParamDef({ key: 'name', label: '姓名', type: 'text', required: true })]
-    const out = evaluateParams(defs, { name: '' }, new Date(2026, 8, 23))
-    expect(out.__errors).toContain('name')
+  it('必填校验返回错误名称集合', () => {
+    const defs = [createParamDef({ name: '姓名', type: 'text', required: true })]
+    const out = evaluateParams(defs, { 姓名: '' }, new Date(2026, 8, 23))
+    expect(out.__errors).toContain('姓名')
+  })
+  it('interpolate 支持中文 token、忽略括号内空白、未知名为空', () => {
+    expect(interpolate('你好{{ 姓名 }}，金额￥{{金额}}', { 姓名: '张三', 金额: '88.00' })).toBe('你好张三，金额￥88.00')
+    expect(interpolate('{{未知}}x', {})).toBe('x')
   })
 })

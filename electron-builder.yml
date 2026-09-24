@@ -7,8 +7,12 @@ directories:
 files:
   - out/**
   - package.json
+  # 只交付 Windows x64，排除 better-sqlite3 其余平台的预编译二进制
+  - "!node_modules/better-sqlite3/prebuilds/darwin-*.node"
+  - "!node_modules/better-sqlite3/prebuilds/linux*.node"
+  - "!node_modules/better-sqlite3/prebuilds/win32-arm64.node"
 asarUnpack:
-  - node_modules/better-sqlite3/**
+  - node_modules/better-sqlite3/prebuilds/win32-x64.node
 win:
   target:
     - target: nsis

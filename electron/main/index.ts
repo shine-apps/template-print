@@ -14,6 +14,7 @@ import { PrintService } from './services/print-service'
 import { PrinterService } from './services/printer-service'
 import { SettingsService } from './services/settings-service'
 import { BackupService } from './services/backup-service'
+import { SeedService } from './services/seed-service'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -37,7 +38,7 @@ function createWindow(): BrowserWindow {
   return win
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const p = paths()
   const client = createDb(p.dbFile)
   runMigrations(client)
@@ -48,9 +49,11 @@ app.whenReady().then(() => {
   const print = new PrintService(p.dataDir, assets, history)
   const printers = new PrinterService(p.dataDir, print)
   const backups = new BackupService(p.dataDir, p.backupsDir, client)
+  const seeds = new SeedService(p.dataDir, templates)
   const services: Services = { assets, templates, history, print, printers, settings, backups }
   const win = createWindow()
   registerIpc(win, services)
+  await seeds.seedIfNeeded()
   history.runScheduledCleanup()
   void backups.runDaily()
   app.on('activate', () => {

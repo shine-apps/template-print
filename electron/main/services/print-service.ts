@@ -30,8 +30,8 @@ function callPrint(
   win: BrowserWindow,
   opts: { silent: boolean; deviceName?: string; copies: number; widthMm: number; heightMm: number }
 ): Promise<{ success: boolean; reason: string | null }> {
-  // 补强 B：整体按 Electron 31 官方 WebContentsPrintOptions 构造；pageSize 的
-  // { width, height } 即官方 Size 结构（单位微米），无需任何 as 断言，运行时字段不变。
+  // 按 Electron 44 官方 WebContentsPrintOptions 构造；pageSize 的
+  // { width, height } 即官方 Size 结构（单位微米），无需任何 as 断言。
   const printOptions: WebContentsPrintOptions = {
     silent: opts.silent,
     deviceName: opts.deviceName,

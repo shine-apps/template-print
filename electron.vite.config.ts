@@ -1,4 +1,4 @@
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'node:url'
 
@@ -6,11 +6,10 @@ const r = (p: string) => fileURLToPath(new URL(p, import.meta.url))
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // electron-vite 5：externalizeDepsPlugin 已废弃，build.externalizeDeps 默认 true，自动外部化依赖
     build: { rollupOptions: { input: { index: r('electron/main/index.ts') } } }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     build: { rollupOptions: { input: { index: r('electron/preload/index.ts') } } }
   },
   renderer: {

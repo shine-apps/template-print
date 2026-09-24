@@ -1,6 +1,7 @@
 import { dialog, ipcMain } from 'electron'
 import { writeFileSync, readFileSync } from 'node:fs'
 import { basename, extname } from 'node:path'
+import { homedir } from 'node:os'
 import AdmZip from 'adm-zip'
 import { IPC, type NewTemplateInput } from '../../../shared/ipc-contract'
 import {
@@ -156,6 +157,8 @@ export function registerTemplateHandlers(deps: Services): void {
   ipcMain.handle(IPC.templatesImport, async () => {
     const r = await dialog.showOpenDialog({
       title: '导入模板',
+      // Electron 43 起未给 defaultPath 会固定落在“下载”目录，显式给用户主目录
+      defaultPath: homedir(),
       filters: [{ name: '模板包', extensions: ['tplx'] }],
       properties: ['openFile']
     })

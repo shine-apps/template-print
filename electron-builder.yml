@@ -1,6 +1,6 @@
 appId: com.local.template-print
 productName: TemplatePrint
-# 使用 switch-sqlite.ps1 切换的预编译 Electron ABI 二进制，禁止 node-gyp 源码重编译
+# better-sqlite3 13（N-API）二进制跨 Node/Electron 通用，无需重编译、无需 ABI 切换
 npmRebuild: false
 directories:
   output: release

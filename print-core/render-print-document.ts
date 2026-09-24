@@ -120,7 +120,11 @@ export function renderPrintDocument(
   assetUrls: RenderOptions
 ): string {
   const { widthMm, heightMm } = doc.paper
-  const sorted = [...doc.content.elements].sort((a, b) => a.zIndex - b.zIndex)
+  // textOnly（预印纸套打）：图片/图形/边框节点不生成，预览/实打印/缩略图共用此输出
+  const visibleElements = doc.textOnly
+    ? doc.content.elements.filter((el) => el.type === 'text')
+    : doc.content.elements
+  const sorted = [...visibleElements].sort((a, b) => a.zIndex - b.zIndex)
   const body = sorted.map((el) => renderElement(el, values, assetUrls)).join('\n')
 
   return `<!doctype html>

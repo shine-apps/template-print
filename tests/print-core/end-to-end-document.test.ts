@@ -17,4 +17,19 @@ describe('端到端打印文档', () => {
     expect(html).toContain('李四')
     expect(html).not.toContain('{{')
   })
+
+  it('textOnly=true 时图形与图片不进 HTML；文本 token 正常', () => {
+    const tpl = createTemplate('t', '小票', { widthMm: 80, heightMm: 200 })
+    tpl.params.push(createParamDef({ name: '姓名', type: 'text' }))
+    tpl.content.elements.push(
+      createElement('shape', { shape: 'rect' }, { x: 1, y: 1, w: 78, h: 100 }),
+      createElement('image', { assetId: 'a9' }, { x: 1, y: 120, w: 20, h: 20 }),
+      createElement('text', { text: '客户：{{姓名}}' }, { x: 5, y: 20, w: 70, h: 6 })
+    )
+    const values = evaluateParams(tpl.params, { 姓名: '李四' })
+    const html = renderPrintDocument(tpl, values, {}) // 新模板默认 textOnly=true
+    expect(html).toContain('李四')
+    expect(html).not.toContain('<img')
+    expect(html).not.toContain('border:')
+  })
 })

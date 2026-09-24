@@ -19,6 +19,7 @@ function buildDoc() {
     createElement('shape', { shape: 'rect', strokeColor: '#000', strokeWidthMm: 0.5, fillColor: null }, { x: 10, y: 10, w: 190, h: 277 }),
     createElement('image', { assetId: 'a1', fit: 'contain', opacity: 1 }, { x: 150, y: 230, w: 30, h: 30 })
   )
+  tpl.textOnly = false
   return tpl
 }
 
@@ -124,5 +125,29 @@ describe('renderPrintDocument', () => {
     const html = renderPrintDocument(doc, { d: EMPTY_LINE_TOKEN }, {})
     expect(html).toContain('text-decoration:underline')
     expect(html).not.toContain('border-bottom')
+  })
+
+  it('textOnly=true：仅输出文本，不输出图片/矩形/椭圆/直线，且不依赖 assetUrls', () => {
+    const doc = buildDoc() // buildDoc 内显式 textOnly=false，这里翻回默认语义
+    doc.textOnly = true
+    const html = renderPrintDocument(doc, { 姓名: '张三' }, {})
+    expect(html).toContain('荣誉证书')
+    expect(html).toContain('姓名：张三')
+    expect(html).not.toContain('{{姓名}}')
+    expect(html).not.toContain('<img')
+    expect(html).not.toContain('file:///')
+    expect(html).not.toContain('border:')          // 矩形/椭圆外框
+    expect(html).not.toContain('border-top:')      // 直线
+    expect(html).not.toContain('border-radius:50%') // 椭圆
+  })
+
+  it('textOnly=false：图片与图形完整输出（回归现有行为）', () => {
+    const doc = buildDoc()
+    expect(doc.textOnly).toBe(false)
+    const html = renderPrintDocument(doc, { 姓名: '张三' }, { a1: 'file:///img/a1.png' })
+    expect(html).toContain('<img')
+    expect(html).toContain('file:///img/a1.png')
+    expect(html).toContain('border:')
+    expect(html).toContain('荣誉证书')
   })
 })

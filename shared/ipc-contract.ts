@@ -7,6 +7,13 @@ export interface PrinterInfoDto {
   isDefault: boolean
 }
 
+/** 系统字体列表：all=兜底+注册表枚举去重排序；common=all 中实际存在的常用字体；defaultFont 固定 ''（系统默认字体栈） */
+export interface FontListDto {
+  all: string[]
+  common: string[]
+  defaultFont: ''
+}
+
 /** 打印机运行时状态（PowerShell Get-Printer 查询结果的归一化五态） */
 export type PrinterRuntimeStatus = 'ready' | 'offline' | 'paper-out' | 'error' | 'unknown'
 
@@ -59,6 +66,7 @@ export const IPC = {
   printersSetDefault: 'printers:set-default',
   printersTestPage: 'printers:test-page',
   printersStatus: 'printers:status',
+  fontsList: 'fonts:list',
   printSubmit: 'print:submit',
   jobsList: 'jobs:list',
   jobsGet: 'jobs:get',
@@ -93,6 +101,9 @@ export interface Api {
     setDefault(name: string): Promise<void>
     testPage(name: string): Promise<void>
     status(names: string[]): Promise<Record<string, PrinterRuntimeStatus>>
+  }
+  fonts: {
+    list(): Promise<FontListDto>
   }
   print: {
     submit(input: SubmitPrintInput): Promise<SubmitPrintResult>

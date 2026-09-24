@@ -24,6 +24,9 @@ const api = {
     testPage: (name: string) => ipcRenderer.invoke(IPC.printersTestPage, name),
     status: (names: string[]) => ipcRenderer.invoke(IPC.printersStatus, names)
   },
+  fonts: {
+    list: () => ipcRenderer.invoke(IPC.fontsList)
+  },
   print: {
     submit: (input: unknown) => ipcRenderer.invoke(IPC.printSubmit, input)
   },

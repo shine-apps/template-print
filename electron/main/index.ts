@@ -12,6 +12,7 @@ import { TemplateService } from './services/template-service'
 import { HistoryService } from './services/history-service'
 import { PrintService } from './services/print-service'
 import { PrinterService } from './services/printer-service'
+import { FontService } from './services/font-service'
 import { SettingsService } from './services/settings-service'
 import { BackupService } from './services/backup-service'
 import { SeedService } from './services/seed-service'
@@ -48,9 +49,10 @@ app.whenReady().then(async () => {
   const history = new HistoryService(p.dataDir, new JobRepository(client.db), settings)
   const print = new PrintService(p.dataDir, assets, history)
   const printers = new PrinterService(p.dataDir, print)
+  const fonts = new FontService()
   const backups = new BackupService(p.dataDir, p.backupsDir, client)
   const seeds = new SeedService(p.dataDir, templates)
-  const services: Services = { assets, templates, history, print, printers, settings, backups }
+  const services: Services = { assets, templates, history, print, printers, fonts, settings, backups }
   const win = createWindow()
   registerIpc(win, services)
   await seeds.seedIfNeeded()

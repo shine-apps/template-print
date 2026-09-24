@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, DatePicker, Image, Input, Select, Space, Table, Tag, Tooltip } from 'antd'
+import { Button, DatePicker, Image, Input, Modal, Select, Space, Table, Tag, Tooltip, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useNavigate } from 'react-router-dom'
@@ -30,6 +30,7 @@ export function HistoryPage(): JSX.Element {
   const [statuses, setStatuses] = useState<string[]>([])
   const [printerName, setPrinterName] = useState<string | undefined>(undefined)
   const [printerOptions, setPrinterOptions] = useState<string[]>([])
+  const [resending, setResending] = useState<string | null>(null)
 
   async function refresh(): Promise<void> {
     setJobs(
@@ -63,6 +64,27 @@ export function HistoryPage(): JSX.Element {
     nav('/print')
   }
 
+  async function resendNow(job: JobListItem): Promise<void> {
+    setResending(job.id)
+    try {
+      const res = await api.print.submit({
+        template: job.templateSnapshot,
+        paramValues: job.paramValues,
+        printerName: job.printerName,
+        copies: job.copies,
+        mode: job.printMode
+      })
+      if (res.status === 'success') message.success('已重新发送打印任务')
+      else if (res.status === 'cancelled') message.info('已取消')
+      else message.error(`仍然失败：${res.errorMessage ?? '未知错误'}`)
+      await refresh()
+    } catch (e) {
+      message.error(`重发失败：${e instanceof Error ? e.message : String(e)}（可改用“重打”进入打印页调整）`)
+    } finally {
+      setResending(null)
+    }
+  }
+
   const columns: ColumnsType<JobListItem> = [
     { title: '时间', dataIndex: 'createdAt', width: 140, render: (v: number) => dayjs(v).format('YYYY-MM-DD HH:mm') },
     { title: '缩略图', dataIndex: 'thumbPath', width: 80, render: (p: string | null) => <Thumb path={p} /> },
@@ -82,11 +104,22 @@ export function HistoryPage(): JSX.Element {
       }
     },
     {
-      title: '操作', width: 80,
+      title: '操作', width: 130,
       render: (_, r) => (
-        <Button size="small" type="link" onClick={() => reprint(r)}>
-          {r.status === 'failed' ? '重试' : '重打'}
-        </Button>
+        <Space size={0}>
+          {r.status === 'failed' && (
+            <Button size="small" type="link" loading={resending === r.id}
+              onClick={() => Modal.confirm({
+                title: '直接重发此任务？',
+                content: `将使用原参数发送到打印机“${r.printerName}”。如需修改参数或打印机，请用“重打”。`,
+                okText: '直接重发', cancelText: '取消',
+                onOk: () => resendNow(r)
+              })}>直接重发</Button>
+          )}
+          <Button size="small" type="link" onClick={() => reprint(r)}>
+            {r.status === 'failed' ? '重打（可修改）' : '重打'}
+          </Button>
+        </Space>
       )
     }
   ]

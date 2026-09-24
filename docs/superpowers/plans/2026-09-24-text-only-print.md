@@ -1,6 +1,6 @@
-﻿# 仅打印文本（预印纸套打）实施计划
+# 仅打印文本（预印纸套打）实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 模板增加「仅打印文本」选项（按模板记忆、默认勾选），启用时打印/预览/缩略图只输出文本元素，不输出图片与图形，适配已预印底图的纸张。
 
@@ -37,7 +37,7 @@
 - Modify: `print-core/template-model.ts`（`TemplateDocumentSchema` 约 117-131 行、`createTemplate` 约 154-179 行）
 - Test: `tests/print-core/template-model.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tests/print-core/template-model.test.ts` 的最后一个 `it(...)`（`'v3：direction 仅接受...'`）之后、describe 回调结束前追加：
 
@@ -55,12 +55,12 @@
   })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run tests/print-core/template-model.test.ts`
 Expected: FAIL，`createTemplate(...) .textOnly` 为 `undefined`（`expected undefined to be true`）。
 
-- [ ] **Step 3: schema 加字段**
+- [x] **Step 3: schema 加字段**
 
 在 `print-core/template-model.ts` 的 `TemplateDocumentSchema` 中，`printMode` 与 `printerName` 之间加一行：
 
@@ -70,7 +70,7 @@ Expected: FAIL，`createTemplate(...) .textOnly` 为 `undefined`（`expected und
     printerName: z.string().nullable().default(null),
 ```
 
-- [ ] **Step 4: 工厂加默认值**
+- [x] **Step 4: 工厂加默认值**
 
 在同一文件 `createTemplate()` 返回对象中，`printMode: 'silent',` 下一行加：
 
@@ -80,12 +80,12 @@ Expected: FAIL，`createTemplate(...) .textOnly` 为 `undefined`（`expected und
     printerName: null,
 ```
 
-- [ ] **Step 5: 运行确认通过**
+- [x] **Step 5: 运行确认通过**
 
 Run: `npx vitest run tests/print-core/template-model.test.ts`
 Expected: PASS（6 个测试全绿）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add print-core/template-model.ts tests/print-core/template-model.test.ts
@@ -100,7 +100,7 @@ git commit -m "feat(model): TemplateDocument 增加 textOnly（默认仅打印�
 - Modify: `print-core/render-print-document.ts`（`renderPrintDocument` 约 116-123 行）
 - Test: `tests/print-core/render-print-document.test.ts`、`tests/print-core/end-to-end-document.test.ts`
 
-- [ ] **Step 1: 写失败测试（仅文本输出）**
+- [x] **Step 1: 写失败测试（仅文本输出）**
 
 在 `tests/print-core/render-print-document.test.ts` 的 describe 回调内（最后一个 `it` 之后）追加：
 
@@ -149,12 +149,12 @@ git commit -m "feat(model): TemplateDocument 增加 textOnly（默认仅打印�
   })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run tests/print-core/render-print-document.test.ts tests/print-core/end-to-end-document.test.ts`
 Expected: FAIL——新用例的 HTML 仍含 `<img`/`border:`（过滤尚未实现）；同时原有 `'输出含毫米 @page...'` 等用例因 createTemplate 默认 true 也会失败（下一步一起修）。
 
-- [ ] **Step 3: 修 buildDoc 显式完整模式**
+- [x] **Step 3: 修 buildDoc 显式完整模式**
 
 `tests/print-core/render-print-document.test.ts` 的 `buildDoc()` 在 `return tpl` 前加一行（该夹具的全部既有用例都断言完整输出）：
 
@@ -173,7 +173,7 @@ function buildDoc() {
 }
 ```
 
-- [ ] **Step 4: 实现过滤**
+- [x] **Step 4: 实现过滤**
 
 在 `print-core/render-print-document.ts` 的 `renderPrintDocument` 中，把元素排序这一行：
 
@@ -191,12 +191,12 @@ function buildDoc() {
   const sorted = [...visibleElements].sort((a, b) => a.zIndex - b.zIndex)
 ```
 
-- [ ] **Step 5: 运行确认通过**
+- [x] **Step 5: 运行确认通过**
 
 Run: `npx vitest run tests/print-core/`
 Expected: PASS（print-core 目录全部用例绿，含新增 3 个）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add print-core/render-print-document.ts tests/print-core/render-print-document.test.ts tests/print-core/end-to-end-document.test.ts
@@ -213,7 +213,7 @@ git commit -m "feat(print): textOnly 时仅渲染文本元素（图片/图形不
 - Modify: `db/repositories/template-repo.ts`（`TemplateRow`、`upsert`、`hydrate`）
 - Test: `tests/db/repositories.test.ts`、`tests/main/tplx-roundtrip.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tests/db/repositories.test.ts` 的 `describe('TemplateRepository', ...)` 内最后一个 `it` 之后追加：
 
@@ -250,12 +250,12 @@ git commit -m "feat(print): textOnly 时仅渲染文本元素（图片/图形不
     expect(imported2.textOnly).toBe(false)
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run tests/db/repositories.test.ts tests/main/tplx-roundtrip.test.ts`
 Expected: FAIL——`textOnly` 读写为 `undefined`（列不存在/未透传），旧库无 `text_only` 列。
 
-- [ ] **Step 3: drizzle schema 加列**
+- [x] **Step 3: drizzle schema 加列**
 
 在 `db/schema.ts` 的 templates 表定义中，`version` 行之后加：
 
@@ -265,7 +265,7 @@ Expected: FAIL——`textOnly` 读写为 `undefined`（列不存在/未透传）
   createdAt: integer('created_at').notNull(),
 ```
 
-- [ ] **Step 4: 建表 DDL 加列**
+- [x] **Step 4: 建表 DDL 加列**
 
 在 `db/migrate.ts` 的 `DDL` 常量中，templates 建表语句的 `version INTEGER NOT NULL DEFAULT 1,` 之后加一行：
 
@@ -275,7 +275,7 @@ Expected: FAIL——`textOnly` 读写为 `undefined`（列不存在/未透传）
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 ```
 
-- [ ] **Step 5: 旧库幂等 ALTER 迁移**
+- [x] **Step 5: 旧库幂等 ALTER 迁移**
 
 在 `db/migrate.ts` 的 `migrateParamsTable` 函数之后、`runMigrations` 之前新增：
 
@@ -302,7 +302,7 @@ export function runMigrations(client: DbClient): void {
 }
 ```
 
-- [ ] **Step 6: 仓储透传字段**
+- [x] **Step 6: 仓储透传字段**
 
 在 `db/repositories/template-repo.ts` 做三处修改：
 
@@ -332,12 +332,12 @@ export function runMigrations(client: DbClient): void {
       createdAt: row.createdAt, updatedAt: row.updatedAt,
 ```
 
-- [ ] **Step 7: 运行确认通过**
+- [x] **Step 7: 运行确认通过**
 
 Run: `npx vitest run tests/db/repositories.test.ts tests/main/tplx-roundtrip.test.ts`
 Expected: PASS（含新增 3 处断言；旧库升级用例仍绿）。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add db/schema.ts db/migrate.ts db/repositories/template-repo.ts tests/db/repositories.test.ts tests/main/tplx-roundtrip.test.ts
@@ -353,7 +353,7 @@ git commit -m "feat(db): templates 增加 text_only 列（旧库幂等迁移默�
 
 说明：`PrintService.submit` 直接 `new BrowserWindow` 编排真实打印，无法在单测中实例化，过滤本身已由 Task 2 纯函数测试覆盖；本任务只改一行编排条件，由 Task 6 的 typecheck 与 CDP 走查（仅文本模式提交不被缺资产拦截）验证。
 
-- [ ] **Step 1: 修改校验条件**
+- [x] **Step 1: 修改校验条件**
 
 把 `electron/main/services/print-service.ts` 中的：
 
@@ -379,12 +379,12 @@ git commit -m "feat(db): templates 增加 text_only 列（旧库幂等迁移默�
     }
 ```
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 Run: `npm run typecheck`
 Expected: 无输出（退出码 0）。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add electron/main/services/print-service.ts
@@ -398,7 +398,7 @@ git commit -m "fix(print): 仅打印文本时跳过图片资产存在性校验"
 **Files:**
 - Modify: `src/renderer/pages/print.tsx`
 
-- [ ] **Step 1: 加 state**
+- [x] **Step 1: 加 state**
 
 在 `src/renderer/pages/print.tsx` 中 `const [mode, setMode] = useState<'silent' | 'dialog'>('silent')` 下一行加：
 
@@ -407,7 +407,7 @@ git commit -m "fix(print): 仅打印文本时跳过图片资产存在性校验"
   const [textOnly, setTextOnly] = useState(true)
 ```
 
-- [ ] **Step 2: 载入文档时初始化**
+- [x] **Step 2: 载入文档时初始化**
 
 在文档加载 effect 中 `setMode(loaded.printMode)` 下一行加：
 
@@ -417,7 +417,7 @@ git commit -m "fix(print): 仅打印文本时跳过图片资产存在性校验"
       setTextOnly(loaded.textOnly)
 ```
 
-- [ ] **Step 3: 预览用携带开关的工作副本**
+- [x] **Step 3: 预览用携带开关的工作副本**
 
 把 `previewHtml` 的 useMemo：
 
@@ -437,7 +437,7 @@ git commit -m "fix(print): 仅打印文本时跳过图片资产存在性校验"
   )
 ```
 
-- [ ] **Step 4: “调整版式”往返保留开关（顺带修正 printMode 同样丢失的问题）**
+- [x] **Step 4: “调整版式”往返保留开关（顺带修正 printMode 同样丢失的问题）**
 
 把 `editLayout()`：
 
@@ -468,7 +468,7 @@ git commit -m "fix(print): 仅打印文本时跳过图片资产存在性校验"
   }
 ```
 
-- [ ] **Step 5: 提交打印携带开关**
+- [x] **Step 5: 提交打印携带开关**
 
 把 `submitNow()` 中：
 
@@ -482,7 +482,7 @@ git commit -m "fix(print): 仅打印文本时跳过图片资产存在性校验"
     const working: TemplateDocument = { ...doc!, printMode: mode, printerName, textOnly }
 ```
 
-- [ ] **Step 6: 加开关 UI**
+- [x] **Step 6: 加开关 UI**
 
 把左侧面板中"静默直打/份数"的 Space 块：
 
@@ -513,7 +513,7 @@ git commit -m "fix(print): 仅打印文本时跳过图片资产存在性校验"
           </div>
 ```
 
-- [ ] **Step 7: 类型检查与构建**
+- [x] **Step 7: 类型检查与构建**
 
 Run: `npm run typecheck`
 Expected: 退出码 0。
@@ -521,7 +521,7 @@ Expected: 退出码 0。
 Run: `npx electron-vite build`
 Expected: 三个 bundle 全部 built 成功。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add src/renderer/pages/print.tsx
@@ -530,9 +530,15 @@ git commit -m "feat(print-ui): 打印页增加仅打印文本开关（预览联�
 
 ---
 
-## Task 6: 全量回归、CDP 走查与打包
+## Task 6: 全量回归、CDP 走查与打包（2026-09-24 完成）
 
-- [ ] **Step 1: 自动化门禁**
+执行结果：子代理驱动 Task 1-5（提交 046210d/b3a848c/05e412a/3a3e6b4/fed6f7e），主代理跑 Task 6。
+vitest **91/91**（18 文件，新增 5 用例）、tsc 0；CDP 走查全项通过：内置证书默认仅文本无边框（开关 ON）、
+关闭后矩形边框即时出现、重开消失；textOnly=false 经 api 持久化、打印页初态与"调整版式"往返后均保持关；
+零 console 错误/异常；__CDP_TO 已清理，真实模板未动。安装包 `release\TemplatePrint Setup 0.1.0.exe`
+121.73 MB（21:17），win32-x64 N-API prebuild 已入 asarUnpack。实际出纸效果留作人工终验。
+
+- [x] **Step 1: 自动化门禁**
 
 Run: `npx vitest run`
 Expected: 全绿（18 个测试文件；在原 86 个基础上新增：模型 1、渲染 2、端到端 1、仓储 1、旧库迁移断言并入既有用例、tplx 1 处）。
@@ -540,7 +546,7 @@ Expected: 全绿（18 个测试文件；在原 86 个基础上新增：模型 1�
 Run: `npm run typecheck`
 Expected: 0 错误。
 
-- [ ] **Step 2: 编写并运行 CDP 走查脚本**
+- [x] **Step 2: 编写并运行 CDP 走查脚本**
 
 按项目技能 `electron-cdp-walkthrough`：后台启动
 
@@ -725,18 +731,18 @@ Expected（逐项核对 report）：
 
 人工查看截图 `a1-textonly-on.png`（无边框）与 `a2-textonly-off.png`（有边框）确认视觉一致。
 
-- [ ] **Step 3: 生产构建**
+- [x] **Step 3: 生产构建**
 
 Run: `npx electron-vite build`
 Expected: main/preload/renderer 三 bundle built 成功。
 
-- [ ] **Step 4: 打包**
+- [x] **Step 4: 打包**
 
 Run: `npm run dist`
 Expected: `DONE`，产物 `release\TemplatePrint Setup 0.1.0.exe`；
 确认 `release\win-unpacked\resources\app.asar.unpacked\node_modules\better-sqlite3\prebuilds\win32-x64.node` 存在。
 
-- [ ] **Step 5: 收尾**
+- [x] **Step 5: 收尾**
 
 - 在本计划文件把各任务复选框勾掉；
 - 更新项目记忆（M4/文本套打：字段、迁移默认值、实测结论）；

@@ -130,7 +130,7 @@ export function DesignerPage(): JSX.Element {
         <Space style={{ background: '#fff', padding: 8, borderBottom: '1px solid #eee' }}>
           <Button onClick={() => { useDesignerStore.getState().undo() }}>撤销</Button>
           <Button onClick={() => { useDesignerStore.getState().redo() }}>重做</Button>
-          <Input variant="outlined" style={{ width: 140 }} value={doc.name}
+          <Input variant="outlined" style={{ width: 200 }} value={doc.name}
             onChange={(e) => useDesignerStore.getState().mutate((d) => { d.name = e.target.value })} />
           <span style={{ color: '#888' }}>{doc.paper.widthMm}×{doc.paper.heightMm}mm</span>
           <Select style={{ width: 130 }} placeholder="分类" allowClear showSearch
@@ -175,7 +175,7 @@ export function DesignerPage(): JSX.Element {
         </Space>
         <div style={{ flex: 1 }}><DesignerCanvas /></div>
       </div>
-      <div style={{ width: 240, background: '#fff', borderLeft: '1px solid #eee', overflow: 'auto' }}>
+      <div style={{ width: 300, background: '#fff', borderLeft: '1px solid #eee', overflow: 'auto' }}>
         <PropertyPanel onCommitted={commit} />
       </div>
       {createModal}

@@ -22,7 +22,7 @@ export function ElementLibrary(): JSX.Element {
   function addText(direction: 'horizontal' | 'vertical'): void {
     const el = createElement(
       'text',
-      { text: '双击编辑文本', fontFamily: '', direction },
+      { text: '右侧文本框编辑文本', fontFamily: '', direction },
       { x: 20, y: 20, w: direction === 'vertical' ? 14 : 60, h: direction === 'vertical' ? 60 : 8 }
     )
     addElement(el)

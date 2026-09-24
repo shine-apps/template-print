@@ -51,14 +51,14 @@ export function ParamManager({ onCommitted }: { onCommitted: () => void }): JSX.
           { title: '参数名称', dataIndex: 'name' },
           { title: '类型', render: (_, r: ParamDef) => TYPE_LABEL[r.type] },
           {
-            title: '操作', width: 90,
+            title: '操作', width: 120,
             render: (_, r: ParamDef) => (
               <Space size="small">
                 <a onClick={() => setEditing({ def: r, isNew: false })}>编辑</a>
                 <Popconfirm title={`删除参数“${r.name}”？文本中未替换的 {{${r.name}}} 打印时将留空`}
                   onConfirm={() => { removeParam(r.name); onCommitted() }}
                   okText="删除" cancelText="取消">
-                  <a style={{ color: '#cf1322' }}>删</a>
+                  <a style={{ color: '#cf1322' }}>删除</a>
                 </Popconfirm>
               </Space>
             )

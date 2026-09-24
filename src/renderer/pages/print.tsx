@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Spin, Switch, message } from 'antd'
+import { Button, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Spin, Switch, message } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
@@ -7,6 +7,7 @@ import { clearDraft, sessionDraft } from '../session-draft'
 import { renderPrintDocument } from '../../../print-core/render-print-document'
 import { evaluateParams, type EvaluatedValues } from '../../../print-core/param-evaluator'
 import { mmToPxAt96 } from '../../../shared/units'
+import { isStandardDriverPaper, paperHintKey } from '../../../shared/paper-presets'
 import type { ParamDef, TemplateDocument } from '../../../print-core/template-model'
 import type { PrinterInfoDto } from '../../../shared/ipc-contract'
 
@@ -24,11 +25,17 @@ export function PrintPage(): JSX.Element {
   const [assetUrls, setAssetUrls] = useState<Record<string, string>>({})
   const [saveOpen, setSaveOpen] = useState(false)
   const [lastResult, setLastResult] = useState<{ working: TemplateDocument } | null>(null)
+  const [paperHintOpen, setPaperHintOpen] = useState(false)
+  const [paperHintCtx, setPaperHintCtx] = useState<{ key: string; w: number; h: number } | null>(null)
+  const [confirmedPaperHints, setConfirmedPaperHints] = useState<string[]>([])
 
   // 原始模板基线（用于 dirty 判定）；从调整版式返回时从草稿恢复
   const baselineRef = useRef<string>('')
   const wrapRef = useRef<HTMLDivElement>(null)
+  const paperHintResolve = useRef<((v: boolean) => void) | null>(null)
   const [box, setBox] = useState({ w: 0, h: 0 })
+
+  useEffect(() => { void api.settings.get().then((s) => setConfirmedPaperHints(s.paperHintsConfirmed)) }, [])
 
   useEffect(() => {
     void (async () => {
@@ -163,7 +170,23 @@ export function PrintPage(): JSX.Element {
       if (!force) return
     }
 
-    const working: TemplateDocument = { ...doc, printMode: mode, printerName }
+    // 自定义纸张静默直打引导（弹框模式由用户在系统对话框自选纸张，不提示）
+    if (mode === 'silent' && doc && !isStandardDriverPaper(doc.paper.widthMm, doc.paper.heightMm)) {
+      const key = paperHintKey(printerName, doc.paper.widthMm, doc.paper.heightMm)
+      if (!confirmedPaperHints.includes(key)) {
+        const proceed = await new Promise<boolean>((resolve) => {
+          setPaperHintCtx({ key, w: doc.paper.widthMm, h: doc.paper.heightMm })
+          setPaperHintOpen(true)
+          paperHintResolve.current = resolve
+        })
+        if (!proceed) return
+      }
+    }
+    await submitNow()
+  }
+
+  async function submitNow(): Promise<void> {
+    const working: TemplateDocument = { ...doc!, printMode: mode, printerName }
     let res
     try {
       res = await api.print.submit({ template: working, paramValues: values, printerName, copies, mode })
@@ -183,6 +206,24 @@ export function PrintPage(): JSX.Element {
     } else {
       nav('/history')
     }
+  }
+
+  async function confirmPaperHint(dontAsk: boolean): Promise<void> {
+    if (!paperHintCtx) return
+    if (dontAsk) {
+      const next = [...confirmedPaperHints, paperHintCtx.key]
+      setConfirmedPaperHints(next)
+      await api.settings.set({ paperHintsConfirmed: next })
+    }
+    setPaperHintOpen(false)
+    paperHintResolve.current?.(true)
+    paperHintResolve.current = null
+  }
+
+  function cancelPaperHint(): void {
+    setPaperHintOpen(false)
+    paperHintResolve.current?.(false)
+    paperHintResolve.current = null
   }
 
   async function saveOverwrite(): Promise<void> {
@@ -281,6 +322,19 @@ export function PrintPage(): JSX.Element {
         ]}
       >
         <p>本次打印前对版式做了修改。可保存到原模板、另存为新模板，或仅本次生效不保存。</p>
+      </Modal>
+
+      <Modal open={paperHintOpen} title="自定义纸张输出提示" okText="仍要打印" cancelText="取消"
+        onOk={() => void confirmPaperHint(false)} onCancel={cancelPaperHint}>
+        <p>当前模板纸张为 <b>{paperHintCtx?.w}×{paperHintCtx?.h} mm</b>，将静默发送到打印机“{printerName}”。</p>
+        <p>若实际输出尺寸或位置不对：</p>
+        <ol style={{ paddingLeft: 20 }}>
+          <li>在 Windows「设置 → 蓝牙和设备 → 打印机和扫描仪」选中该打印机，进入「打印服务器属性」，按上面的毫米尺寸新建表单；</li>
+          <li>在打印机首选项中选用该表单；或改用“弹框打印”，在系统对话框中确认纸张。</li>
+        </ol>
+        <Checkbox checked={false} onChange={(e) => e.target.checked && void confirmPaperHint(true)}>
+          本次仍要打印，且以后对此打印机+尺寸不再提示
+        </Checkbox>
       </Modal>
     </div>
   )

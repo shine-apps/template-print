@@ -41,9 +41,35 @@ function queryPrinterStatus(name: string, timeoutMs = 3000): Promise<PrinterRunt
   })
 }
 
+/**
+ * 通过 PowerShell CIM 查询系统默认打印机名称。
+ * PrinterInfo.isDefault 自 Electron 36 起被上游移除，默认打印机只能自行查询。
+ * 任何异常一律回落 null，绝不抛出。
+ */
+function queryDefaultPrinter(timeoutMs = 3000): Promise<string | null> {
+  return new Promise((resolve) => {
+    const command =
+      "(Get-CimInstance -ClassName Win32_Printer -Filter 'Default=TRUE' -ErrorAction SilentlyContinue | " +
+      "Select-Object -First 1 -ExpandProperty Name)"
+    const child = execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', command],
+      { timeout: timeoutMs, windowsHide: true }
+    )
+    let out = ''
+    child.stdout?.on('data', (d: string) => { out += d })
+    child.on('error', () => resolve(null))
+    child.on('close', () => {
+      const name = out.trim()
+      resolve(name || null)
+    })
+  })
+}
+
 export class PrinterService {
   /** 缓存进行中/已完成的查询 Promise，60 秒内的并发与重复调用共享同一次 PowerShell 查询 */
   private statusCache = new Map<string, { at: number; p: Promise<PrinterRuntimeStatus> }>()
+  private defaultCache: { at: number; p: Promise<string | null> } | null = null
 
   constructor(
     private dataDir: string,
@@ -52,7 +78,16 @@ export class PrinterService {
 
   async list(win: BrowserWindow): Promise<PrinterInfoDto[]> {
     const all = await win.webContents.getPrintersAsync()
-    return all.map((p) => ({ name: p.name, isDefault: p.isDefault }))
+    // isDefault 已随 Chromium 移除：默认标记改由 CIM 查询（60 秒缓存，失败则全部 false）
+    const defP = this.getDefaultPrinterName()
+    const def = await defP
+    return all.map((p) => ({ name: p.name, isDefault: def !== null && p.name === def }))
+  }
+  private getDefaultPrinterName(): Promise<string | null> {
+    if (this.defaultCache && Date.now() - this.defaultCache.at < 60_000) return this.defaultCache.p
+    const p = queryDefaultPrinter()
+    this.defaultCache = { at: Date.now(), p }
+    return p
   }
   getDefault(): string | null {
     return loadSettings(this.dataDir).defaultPrinterName

@@ -30,4 +30,27 @@ describe('模板模型校验', () => {
     expect(TemplateDocumentSchema.safeParse(d).success).toBe(false)
     expect(() => createParamDef({ name: '坏{名称', type: 'text' })).toThrow()
   })
+
+  it('v3：text props 支持 underline/direction，旧形态补默认值', () => {
+    const d = createTemplate('t', 'x', { widthMm: 40, heightMm: 30 })
+    d.content.elements.push(createElement('text', { text: 'a' }, { x: 1, y: 1, w: 10, h: 5 }))
+    const parsed = TemplateDocumentSchema.parse(d)
+    expect(parsed.version).toBe(3)
+    const t = parsed.content.elements.find((e) => e.type === 'text')!
+    expect(t.props.underline).toBe(false)
+    expect(t.props.direction).toBe('horizontal')
+  })
+
+  it('v3：direction 仅接受 horizontal/vertical；underline 为布尔', () => {
+    const d = createTemplate('t', 'x', { widthMm: 40, heightMm: 30 })
+    d.content.elements.push(createElement('text',
+      { text: '竖', direction: 'vertical', underline: true },
+      { x: 1, y: 1, w: 10, h: 20 }))
+    const ok = TemplateDocumentSchema.safeParse(d)
+    expect(ok.success).toBe(true)
+    const bad = TemplateDocumentSchema.safeParse({
+      ...d, content: { elements: [{ ...d.content.elements[0], props: { ...d.content.elements[0].props, direction: 'sideways' } }] }
+    })
+    expect(bad.success).toBe(false)
+  })
 })

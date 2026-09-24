@@ -2,6 +2,7 @@ import { eq, gte, lt, desc, and, inArray, type SQL } from 'drizzle-orm'
 import { printJobs } from '../schema'
 import type { DrizzleDb } from '../client'
 import { TemplateDocumentSchema, type TemplateDocument } from '../../print-core/template-model'
+import { migrateDocument } from '../../print-core/migrate'
 
 export type JobStatus = 'success' | 'failed' | 'cancelled'
 
@@ -60,7 +61,7 @@ export class JobRepository {
       id: row.id,
       templateId: row.templateId ?? null,
       templateNameSnapshot: row.templateNameSnapshot,
-      templateSnapshot: TemplateDocumentSchema.parse(row.templateSnapshot),
+      templateSnapshot: TemplateDocumentSchema.parse(migrateDocument(row.templateSnapshot)),
       paramValues: row.paramValues as Record<string, string>,
       thumbPath: row.thumbPath ?? null,
       printerName: row.printerName,

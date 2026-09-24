@@ -21,9 +21,9 @@ const v1 = () => ({
 })
 
 describe('migrateDocument', () => {
-  it('v1：param 元素转 {{名称}} 文本；参数 id/key/label 合并为 name；version=2', () => {
+  it('v1：param 元素转 {{名称}} 文本；参数 id/key/label 合并为 name；version=3', () => {
     const doc = TemplateDocumentSchema.parse(migrateDocument(v1()))
-    expect(doc.version).toBe(2)
+    expect(doc.version).toBe(3)
     expect(doc.params[0].name).toBe('姓名')
     expect('id' in doc.params[0]).toBe(false)
     const pe = doc.content.elements[1]
@@ -42,14 +42,23 @@ describe('migrateDocument', () => {
     expect(doc.params.map((p) => p.name)).toEqual(['日期', '日期2', 'c'])
   })
 
-  it('v2 文档原样返回', () => {
-    const v2 = TemplateDocumentSchema.parse(migrateDocument(v1()))
-    expect(migrateDocument(v2)).toBe(v2)
+  it('v2 输入仅升版本号到 3，内容/参数原样', () => {
+    const v2 = TemplateDocumentSchema.parse(migrateDocument(v1())) // 已是 3
+    const rawV2 = JSON.parse(JSON.stringify({ ...v2, version: 2 }))
+    const out = TemplateDocumentSchema.parse(migrateDocument(rawV2))
+    expect(out.version).toBe(3)
+    expect(out.params.map((p) => p.name)).toEqual(['姓名'])
+    expect(out.content.elements[1].type).toBe('text')
+  })
+
+  it('v3 原样返回（同一引用）', () => {
+    const v3 = TemplateDocumentSchema.parse(migrateDocument(v1()))
+    expect(migrateDocument(v3)).toBe(v3)
   })
 })
 
 describe('migrateParamValues', () => {
-  it('v1 快照的参数值按键→名称重映射；v2 原样', () => {
+  it('v1 快照的参数值按键→名称重映射；v2/v3 原样', () => {
     const raw = v1()
     expect(migrateParamValues(raw, { p_name: '张三' })).toEqual({ 姓名: '张三' })
     const v2 = TemplateDocumentSchema.parse(migrateDocument(raw))

@@ -2,6 +2,7 @@ import { eq, like, and, desc, type SQL } from 'drizzle-orm'
 import { templates, templateParams } from '../schema'
 import type { DrizzleDb } from '../client'
 import { TemplateDocumentSchema, type TemplateDocument } from '../../print-core/template-model'
+import { migrateDocument } from '../../print-core/migrate'
 
 interface TemplateRow {
   id: string
@@ -75,22 +76,21 @@ export class TemplateRepository {
   }
 
   private hydrate(row: TemplateRow, params: ParamRow[]): TemplateDocument {
-    // 启动迁移已保证库内为 v2；Drizzle 查询返回 JS 属性名（camelCase），JSON 模式列已自动反序列化
-    return TemplateDocumentSchema.parse({
+    // Drizzle 查询返回 JS 属性名（camelCase），JSON 模式列已自动反序列化；
+    // 库内可能残留 v1/v2 文档，统一经 migrateDocument 归一到当前版本再校验
+    const raw = {
       id: row.id, name: row.name, category: row.category, paper: row.paper,
       content: row.content, printMode: row.printMode, printerName: row.printerName,
-      isBuiltin: !!row.isBuiltin, version: 2,
+      isBuiltin: !!row.isBuiltin, version: row.version,
       createdAt: row.createdAt, updatedAt: row.updatedAt,
-      params: params
-        .slice()
-        .sort((a, b) => a.order - b.order)
-        .map((pr) => ({
-          name: pr.name, type: pr.type, required: !!pr.required, defaultValue: pr.defaultValue,
-          dateFormat: pr.dateFormat, maxLength: pr.maxLength, min: pr.min, max: pr.max,
-          decimals: pr.decimals, thousandsSeparator: !!pr.thousandsSeparator,
-          printOnEmpty: pr.printOnEmpty, order: pr.order
-        }))
-    })
+      params: params.slice().sort((a, b) => a.order - b.order).map((pr) => ({
+        name: pr.name, type: pr.type, required: !!pr.required, defaultValue: pr.defaultValue,
+        dateFormat: pr.dateFormat, maxLength: pr.maxLength, min: pr.min, max: pr.max,
+        decimals: pr.decimals, thousandsSeparator: !!pr.thousandsSeparator,
+        printOnEmpty: pr.printOnEmpty, order: pr.order
+      }))
+    }
+    return TemplateDocumentSchema.parse(migrateDocument(raw))
   }
 
   getById(id: string): TemplateDocument | null {

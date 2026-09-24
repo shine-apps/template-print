@@ -200,7 +200,7 @@ describe('v1 旧库一次性升级', () => {
 
       const r = new TemplateRepository(legacy.db)
       const doc = r.getById('old1')!
-      expect(doc.version).toBe(2)
+      expect(doc.version).toBe(3)
       expect(doc.params.map((p) => p.name)).toEqual(['姓名'])
       const paramEl = doc.content.elements[1]
       expect(paramEl.type).toBe('text')
@@ -210,7 +210,7 @@ describe('v1 旧库一次性升级', () => {
       // 幂等：再跑一次不报错、不重复改
       expect(() => runMigrations(legacy)).not.toThrow()
       const doc2 = r.getById('old1')!
-      expect(doc2.version).toBe(2)
+      expect(doc2.version).toBe(3)
       expect(doc2.params.map((p) => p.name)).toEqual(['姓名'])
     } finally {
       legacy.sqlite.close()

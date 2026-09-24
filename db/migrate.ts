@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_assets_template ON assets(template_id);
 `
 
 /**
- * ① 旧库文档/历史快照一次性升级为 v2（幂等）。
+ * ① 旧库文档/历史快照一次性升级为 v3（幂等）。
  * 必须在旧 template_params 关系表（仍含 key/label）重建之前执行——
  * content 中 param 元素转 token 需要 paramId(key)→名称 映射。
  */
@@ -44,9 +44,9 @@ function upgradeDocumentsToV2(client: DbClient): void {
   if (cols.length === 0 || cols.some((c) => c.name === 'name')) return // 新库或已升级
 
   const tRows = client.sqlite.prepare('SELECT * FROM templates').all() as Record<string, unknown>[]
-  const updT = client.sqlite.prepare('UPDATE templates SET content = ?, version = 2 WHERE id = ?')
+  const updT = client.sqlite.prepare('UPDATE templates SET content = ?, version = 3 WHERE id = ?')
   for (const r of tRows) {
-    if (Number(r.version) >= 2) continue
+    if (Number(r.version) >= 3) continue
     const pRows = client.sqlite
       .prepare('SELECT * FROM template_params WHERE template_id = ?')
       .all(r.id) as Record<string, unknown>[]
@@ -104,7 +104,7 @@ function migrateParamsTable(client: DbClient): void {
 
 /**
  * 启动时一次性升级（顺序不可调换）：
- * ① 旧库：文档/历史快照升级为 v2（需要旧 key/label）
+ * ① 旧库：文档/历史快照升级为 v3（需要旧 key/label）
  * ② 新库建表（全部 IF NOT EXISTS；旧库不受影响）
  * ③ 旧库：template_params 由 id/key/label 重建为 name
  */

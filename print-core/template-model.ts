@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const CONTENT_VERSION = 2
+export const CONTENT_VERSION = 3
 
 // ---------- 几何（单位 mm） ----------
 const GeometrySchema = z.object({
@@ -26,9 +26,16 @@ export const TextElementSchema = GeometrySchema.extend({
     italic: z.boolean().default(false),
     align: z.enum(['left', 'center', 'right']).default('left'),
     color: z.string().default('#000000'),
-    lineHeight: z.number().positive().default(1.2)
+    lineHeight: z.number().positive().default(1.2),
+    underline: z.boolean().default(false),
+    direction: z.enum(['horizontal', 'vertical']).default('horizontal')
   })
 })
+
+export type TextDirection = 'horizontal' | 'vertical'
+/** 未显式指定字体时（fontFamily===''）画布与打印共用的系统默认字体栈 */
+export const SYSTEM_FONT_STACK =
+  'system-ui, "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif'
 
 export const ImageElementSchema = GeometrySchema.extend({
   id: z.string().min(1),

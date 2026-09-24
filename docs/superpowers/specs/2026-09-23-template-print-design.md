@@ -22,7 +22,7 @@
 | 程序形态 | 本地桌面应用 |
 | 打印机类型 | 普通办公（A4/A3）、标签/条码（热敏/热转印）、票据小票（58/80mm）、证卡/特种自定义尺寸，四类都支持 |
 | 使用规模 | 先单机单人；数据访问层预留多机/PostgreSQL 扩展能力 |
-| 设计元素 | 静态文本、参数占位文本、图片（含条码/二维码图片）、基础图形（直线/矩形/椭圆） |
+| 设计元素 | 静态文本（内嵌 {{参数名称}} 占位符）、图片（含条码/二维码图片）、基础图形（直线/矩形/椭圆） |
 | 排版辅助 | 对齐辅助线 + 网格吸附、图层顺序/锁定、元素旋转 |
 | 打印方式 | 静默直打与系统打印对话框两种，按模板配置，可临时切换 |
 | 参数类型 | 单行文本、多行文本、日期（默认今天）、数字/金额；不做下拉、流水号、图片参数 |
@@ -121,39 +121,35 @@ interface TemplateContent {
 type TemplateElement =
   | { id: string; type: 'text';    x:number; y:number; w:number; h:number;
       rotation:number; locked:boolean; zIndex:number;
-      props: { text:string; fontFamily:string; fontSizeMm:number;
+      props: { text:string /* 可含 {{参数名称}} 占位符 */; fontFamily:string; fontSizeMm:number;
                bold:boolean; italic:boolean; align:'left'|'center'|'right';
                color:string; lineHeight:number } }
-  | { id: string; type: 'param';   /* 同上几何字段 */
-      props: { paramId:string; fontFamily:string; fontSizeMm:number;
-               bold:boolean; align:'left'|'center'|'right'; color:string;
-               autoFit:boolean } }
-  | { id: string; type: 'image';   /* 同上几何字段（条码/二维码以此元素承载） */
+  | { id: string; type: 'image';   /* 几何字段同上（条码/二维码以此元素承载） */
       props: { assetId:string; fit:'contain'|'cover'|'fill'; opacity:number } }
-  | { id: string; type: 'shape';   /* 同上几何字段 */
+  | { id: string; type: 'shape';   /* 几何字段同上 */
       props: { shape:'line'|'rect'|'ellipse';
                strokeColor:string; strokeWidthMm:number; fillColor:string|null } };
 ```
 
-所有几何字段单位均为毫米（mm）。
+所有几何字段单位均为毫米（mm）。**content.version = 2（2026-09-24 改造）**：参数不再是画布元素，而是文本中的 `{{参数名称}}` 占位符；v1 数据在启动时一次性迁移（param 元素转含 token 的文本）。
 
-### 4.3 template_params（参数定义）
+### 4.3 template_params（参数定义，v2）
+
+参数只有一个"参数名称"，同时承担字段标识与显示名（模板内唯一，允许中文，1–30 字，不含 `{}`）。复合主键 `(template_id, name)`。
 
 | 字段 | 说明 |
 |---|---|
-| id / template_id / order | 主键、所属模板、表单排序 |
-| key | 字段标识（英文，如 `name`/`date`），模板内唯一 |
-| label | 表单显示名（如"姓名"） |
+| template_id / name / sort_order | 所属模板、参数名称（唯一）、表单排序 |
 | type | `text` \| `textarea` \| `date` \| `number` |
 | required | 是否必填 |
 | default_value | 默认值；date 类型支持特殊值 `"today"` |
 | date_format | 日期输出格式，如 `yyyy-MM-dd`、`yyyy年M月d日` |
 | max_length | 文本最大长度 |
 | min / max | 数字范围 |
-| number_format | 数字格式（小数位、千分位） |
+| decimals / thousands_separator | 数字格式（小数位、千分位） |
 | print_on_empty | 空值处理：`blank` 留空白 \| `line` 占位横线 |
 
-约束：删除模板时级联删除其参数定义。
+引用方式：文本元素 props.text 中写 `{{参数名称}}`（括号内侧空白忽略）；打印时按名称替换，未定义名称替换为空串；改名时同步替换全部文本 token。删除模板时级联删除参数定义。
 
 ### 4.4 assets（模板图片）
 
@@ -212,7 +208,7 @@ type TemplateElement =
 
 1. 新建 → 选纸张：A4/A3、58mm、80mm、常见标签预设或自定义毫米尺寸；设置方向与边距。
 2. 三栏设计器中添加元素并排版。
-3. 添加"参数占位"元素时自动在参数列表登记一条 `template_params`，可在属性面板编辑标签/类型/必填/默认值；参数定义也可不被画布引用（仅表单收集，首版禁止此情况——删除占位元素时提示是否同步删除参数定义）。
+3. 在"参数定义"中维护参数（仅登记，不上画布）；在文本里以 `{{参数名称}}` 引用（右栏"插入参数"或手写）；改名时同步替换文本 token；删除参数时提示文本中未替换的 token 打印时将留空（元素保留）。
 4. 保存后进入模板列表；设计中可随时保存。
 
 ### 5.4 模板维护
@@ -234,7 +230,7 @@ type TemplateElement =
 
 ### 6.1 模板设计器（经典三栏）
 
-- **左栏**：上半元素库（文本/参数占位/图片/图形），下半图层面板（按 zIndex 列出全部元素，支持拖拽排序、显隐、锁定/解锁、删除）。
+- **左栏**：上半元素库（文本/图片/图形），下半图层面板（按 zIndex 列出全部元素，支持拖拽排序、显隐、锁定/解锁、删除）。参数定义在右栏维护。
 - **中间**：顶部工具条（撤销/重做、模板名称与分类、纸张尺寸、缩放、网格开关、保存）；下方画布按纸张真实比例显示，网格、对齐辅助线、吸附。
 - **右栏**：属性面板，随选中元素类型变化：几何（X/Y/宽高/旋转，毫米）、文本（字体/字号/加粗斜体/对齐/颜色/行高）、参数绑定、图片填充方式、图形描边填充等。
 
@@ -267,11 +263,12 @@ type TemplateElement =
   → ④ 结果处理：缩略图 + 写 print_jobs；成功且 dirty 弹保存决策；失败可重试
 ```
 
-### 7.1 参数求值
+### 7.1 参数求值（v2）
 
+- 文本中的 token 语法：`{{参数名称}}`，正则 `/\{\{\s*([^{}]+?)\s*\}\}/g`（允许中文，括号内侧空白忽略）；按名称查求值结果，未定义名称替换为空串，所有插入值做 HTML 转义。
 - date：按 `date_format` 格式化；默认值 `today` 在打开填写页时解析为当天。
-- number：按 `number_format` 输出小数位与千分位。
-- 空值：`blank` 输出空串；`line` 输出与元素等宽的占位横线。
+- number：按小数位/千分位输出。
+- 空值：`blank` 输出空串；`line` 输出下划线片段（行内 token）。
 
 ### 7.2 打印 HTML 渲染
 

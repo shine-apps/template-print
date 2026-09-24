@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Stage, Layer, Rect, Text as KText, Image as KImage, Line, Ellipse, Group, Transformer } from 'react-konva'
+import { Stage, Layer, Rect, Image as KImage, Line, Ellipse, Group, Transformer } from 'react-konva'
 import type Konva from 'konva'
 import { mmToPxAt96 } from '../../../shared/units'
 import { useDesignerStore } from '../store/designer-store'
 import type { TemplateElement } from '../../../print-core/template-model'
 import { snapPosition, type MovingRect } from './guides'
+import { LaidText } from './laid-text'
 
 function useLoadedImage(url: string | undefined): HTMLImageElement | undefined {
   const [img, setImg] = useState<HTMLImageElement | undefined>()
@@ -80,12 +81,8 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls, onDr
   let body: JSX.Element
   if (el.type === 'text') {
     body = (
-      <KText ref={shapeRef as never} {...common}
-        text={el.props.text || '文本'}
-        fontSize={MM(el.props.fontSizeMm, scale)}
-        fontStyle={`${el.props.bold ? 'bold' : ''} ${el.props.italic ? 'italic' : ''}`.trim()}
-        align={el.props.align} fill={el.props.color}
-        onDblClick={() => {
+      <LaidText el={el} scale={scale} shapeRef={shapeRef as never} commonProps={common}
+        onEdit={() => {
           const v = window.prompt('编辑文本', el.props.text)
           if (v !== null) updateProps(el.id, { text: v })
         }} />

@@ -1,5 +1,5 @@
 import { useRef, type ChangeEvent } from 'react'
-import { Button, Space } from 'antd'
+import { Button, Dropdown, Space } from 'antd'
 import { createElement } from '../../../print-core/template-model'
 import { useDesignerStore } from '../store/designer-store'
 
@@ -14,6 +14,16 @@ export function ElementLibrary(): JSX.Element {
       type,
       props ?? (type === 'text' ? { text: '双击编辑文本' } : { shape: 'rect' }),
       { x: 20, y: 20, w: type === 'shape' ? 50 : 60, h: type === 'shape' ? 30 : 8 }
+    )
+    addElement(el)
+    commit()
+  }
+
+  function addText(direction: 'horizontal' | 'vertical'): void {
+    const el = createElement(
+      'text',
+      { text: '双击编辑文本', fontFamily: '', direction },
+      { x: 20, y: 20, w: direction === 'vertical' ? 14 : 60, h: direction === 'vertical' ? 60 : 8 }
     )
     addElement(el)
     commit()
@@ -45,9 +55,19 @@ export function ElementLibrary(): JSX.Element {
     <div>
       <div style={{ opacity: 0.7, fontSize: 12, margin: '4px 0' }}>添加元素</div>
       <Space direction="vertical" style={{ width: '100%' }}>
-        <Button block onClick={() => add('text')}>文本</Button>
+        <Dropdown
+          menu={{
+            items: [
+              { key: 'h', label: '横排文本框' },
+              { key: 'v', label: '竖排文本框' }
+            ],
+            onClick: ({ key }) => addText(key === 'v' ? 'vertical' : 'horizontal')
+          }}
+          trigger={['click']}>
+          <Button block>文本 ▾</Button>
+        </Dropdown>
         <div style={{ opacity: 0.55, fontSize: 12, margin: '6px 0' }}>
-          参数在右栏“参数定义”中维护，文本中用 {'{{参数名称}}'} 引用
+          文本中用 {'{{参数名称}}'} 引用参数
         </div>
         <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/bmp"
           style={{ display: 'none' }} onChange={onFile} />

@@ -43,7 +43,11 @@ export function LayersPanel(): JSX.Element {
             borderRadius: 4, padding: '4px 6px', marginBottom: 3, cursor: 'pointer',
             display: 'flex', alignItems: 'center', gap: 6, fontSize: 12
           }}>
-          <span style={{ flex: 1 }}>{LABEL[el.type]}</span>
+          <span style={{ flex: 1 }}>
+            {el.type === 'text'
+              ? (el.props.direction === 'vertical' ? '文本（竖）' : '文本（横）')
+              : LABEL[el.type]}
+          </span>
           <button title="锁定/解锁" onClick={(e) => {
             e.stopPropagation()
             updateGeometry(el.id, { locked: !el.locked }); commit()

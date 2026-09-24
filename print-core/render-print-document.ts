@@ -1,5 +1,6 @@
 import type { TemplateDocument, TemplateElement } from './template-model'
 import { EMPTY_LINE_TOKEN } from './param-evaluator'
+import { SYSTEM_FONT_STACK } from './text-layout'
 
 export interface RenderOptions {
   /** assetId → 可在打印窗口/预览中访问的图片 URL（file:// 或 data:） */
@@ -31,8 +32,35 @@ function geoStyle(el: TemplateElement): string {
 
 /**
  * 文本分段渲染：普通片段做 HTML 转义；{{参数名称}} token 用求值后的值替换（同样转义），
- * 值为空值横线标记时渲染为下划线片段。未知名替换为空串。
+ * 值为空值横线标记时渲染为逻辑下划线片段。未知名替换为空串。
  */
+function textSegments(text: string, values: Record<string, string>): string {
+  const re = /\{\{\s*([^{}]+?)\s*\}\}/g
+  const parts: string[] = []
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) {
+    parts.push(esc(text.slice(last, m.index)))
+    const v = values[m[1].trim()] ?? ''
+    parts.push(
+      v === EMPTY_LINE_TOKEN
+        ? '<span style="text-decoration:underline;white-space:pre">&emsp;&emsp;</span>'
+        : esc(v)
+    )
+    last = m.index + m[0].length
+  }
+  parts.push(esc(text.slice(last)))
+  return parts.join('')
+}
+
+function fontCss(p: { fontFamily: string; fontSizeMm: number; bold: boolean; italic: boolean }): string {
+  const family = p.fontFamily.trim() === ''
+    ? SYSTEM_FONT_STACK
+    : `'${p.fontFamily.replace(/'/g, '\\\'')}', ${SYSTEM_FONT_STACK}`
+  return `font-family:${family};font-size:${p.fontSizeMm}mm;` +
+    `font-weight:${p.bold ? 'bold' : 'normal'};font-style:${p.italic ? 'italic' : 'normal'}`
+}
+
 function renderTextHtml(
   p: {
     text: string
@@ -40,33 +68,25 @@ function renderTextHtml(
     fontSizeMm: number
     bold: boolean
     italic: boolean
-    align: string
+    underline: boolean
+    direction: 'horizontal' | 'vertical'
+    align: 'left' | 'center' | 'right'
     color: string
     lineHeight: number
   },
   values: Record<string, string>
 ): string {
-  const re = /\{\{\s*([^{}]+?)\s*\}\}/g
-  const parts: string[] = []
-  let last = 0
-  let m: RegExpExecArray | null
-  while ((m = re.exec(p.text))) {
-    parts.push(esc(p.text.slice(last, m.index)))
-    const v = values[m[1].trim()] ?? ''
-    parts.push(
-      v === EMPTY_LINE_TOKEN
-        ? '<span style="display:inline-block;min-width:15mm;border-bottom:0.3mm solid #000">&nbsp;</span>'
-        : esc(v)
-    )
-    last = m.index + m[0].length
+  const body = textSegments(p.text, values)
+  const deco = p.underline ? 'text-decoration:underline;text-decoration-thickness:0.2mm;' : ''
+  if (p.direction === 'vertical') {
+    const justify = p.align === 'left' ? 'flex-start' : p.align === 'right' ? 'flex-end' : 'center'
+    // 外层 flex row-reverse 实现列组对齐（left=贴右=flex-start）；内层 vertical-rl 实现竖排
+    return `<div style="display:flex;flex-direction:row-reverse;justify-content:${justify};width:100%;height:100%;overflow:hidden">` +
+      `<div style="writing-mode:vertical-rl;text-orientation:mixed;height:100%;${fontCss(p)};` +
+      `color:${p.color};line-height:${p.lineHeight};white-space:pre-wrap;overflow:hidden;${deco}">${body}</div></div>`
   }
-  parts.push(esc(p.text.slice(last)))
-  return (
-    `<div style="font-family:'${esc(p.fontFamily)}';font-size:${p.fontSizeMm}mm;` +
-    `font-weight:${p.bold ? 'bold' : 'normal'};font-style:${p.italic ? 'italic' : 'normal'};` +
-    `text-align:${p.align};color:${p.color};line-height:${p.lineHeight};` +
-    `white-space:pre-wrap;word-break:break-word;overflow:hidden">${parts.join('')}</div>`
-  )
+  return `<div style="${fontCss(p)};color:${p.color};line-height:${p.lineHeight};` +
+    `text-align:${p.align};white-space:pre-wrap;word-break:break-word;overflow:hidden;${deco}">${body}</div>`
 }
 
 function renderElement(el: TemplateElement, values: Record<string, string>, assetUrls: Record<string, string>): string {

@@ -2,6 +2,13 @@ import { describe, it, expect } from 'vitest'
 import { createTemplate, createElement, createParamDef } from '../../print-core/template-model'
 import { renderPrintDocument } from '../../print-core/render-print-document'
 import { EMPTY_LINE_TOKEN } from '../../print-core/param-evaluator'
+import { SYSTEM_FONT_STACK } from '../../print-core/text-layout'
+
+function baseDoc(elements: ReturnType<typeof createElement>[]) {
+  const tpl = createTemplate('t', 'x', { widthMm: 40, heightMm: 30 })
+  tpl.content.elements.push(...elements)
+  return tpl
+}
 
 function buildDoc() {
   const tpl = createTemplate('t1', '证书', { widthMm: 210, heightMm: 297 })
@@ -38,13 +45,14 @@ describe('renderPrintDocument', () => {
     expect(html).not.toContain('<b>张三</b>')
   })
 
-  it('空值横线 token 渲染为下划线片段', () => {
+  it('空值横线 token 渲染为逻辑下划线片段（text-decoration）', () => {
     const doc = buildDoc()
     doc.content.elements = [
       createElement('text', { text: '日期：{{日期}}' }, { x: 1, y: 1, w: 60, h: 8 })
     ]
     const html = renderPrintDocument(doc, { 日期: EMPTY_LINE_TOKEN }, {})
-    expect(html).toContain('border-bottom:0.3mm solid #000')
+    expect(html).toContain('text-decoration:underline')
+    expect(html).not.toContain('border-bottom')
   })
 
   it('文本引用未定义参数时替换为空串', () => {
@@ -60,5 +68,32 @@ describe('renderPrintDocument', () => {
     const html = renderPrintDocument(tpl, {}, {})
     expect(html).toContain('&lt;b&gt;&amp;&lt;/b&gt;')
     expect(html).not.toContain('<b>&</b>')
+  })
+
+  it('fontFamily 空串时输出系统默认字体栈', () => {
+    const doc = baseDoc([createElement('text', { text: 'x', fontFamily: '' }, { x: 1, y: 1, w: 20, h: 8 })])
+    const html = renderPrintDocument(doc, {}, {})
+    expect(html).toContain(SYSTEM_FONT_STACK)
+  })
+
+  it('underline 输出 text-decoration:underline', () => {
+    const doc = baseDoc([createElement('text', { text: 'x', underline: true }, { x: 1, y: 1, w: 20, h: 8 })])
+    expect(renderPrintDocument(doc, {}, {})).toContain('text-decoration:underline')
+  })
+
+  it('竖排输出 writing-mode/text-orientation 与 flex row-reverse；align left 映射 justify-content:flex-start', () => {
+    const doc = baseDoc([createElement('text', { text: '甲{{乙}}', direction: 'vertical', align: 'left' }, { x: 1, y: 1, w: 20, h: 40 })])
+    const html = renderPrintDocument(doc, { 乙: '乙' }, {})
+    expect(html).toContain('writing-mode:vertical-rl')
+    expect(html).toContain('text-orientation:mixed')
+    expect(html).toContain('flex-direction:row-reverse')
+    expect(html).toContain('justify-content:flex-start')
+  })
+
+  it('空值横线占位为 text-decoration（非 border-bottom）', () => {
+    const doc = baseDoc([createElement('text', { text: '{{d}}' }, { x: 1, y: 1, w: 20, h: 8 })])
+    const html = renderPrintDocument(doc, { d: EMPTY_LINE_TOKEN }, {})
+    expect(html).toContain('text-decoration:underline')
+    expect(html).not.toContain('border-bottom')
   })
 })

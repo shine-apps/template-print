@@ -53,4 +53,16 @@ describe('模板模型校验', () => {
     })
     expect(bad.success).toBe(false)
   })
+
+  it('textOnly：createTemplate 默认 true；缺字段 zod 补 true；显式 false 保留', () => {
+    expect(createTemplate('t1', 'x', { widthMm: 40, heightMm: 30 }).textOnly).toBe(true)
+
+    const raw = JSON.parse(JSON.stringify(createTemplate('t2', 'x', { widthMm: 40, heightMm: 30 })))
+    delete raw.textOnly
+    expect(TemplateDocumentSchema.parse(raw).textOnly).toBe(true)
+
+    const off = JSON.parse(JSON.stringify(raw))
+    off.textOnly = false
+    expect(TemplateDocumentSchema.parse(off).textOnly).toBe(false)
+  })
 })

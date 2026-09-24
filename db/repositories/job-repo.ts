@@ -1,4 +1,4 @@
-import { eq, gte, desc, and, type SQL } from 'drizzle-orm'
+import { eq, gte, desc, and, inArray, type SQL } from 'drizzle-orm'
 import { printJobs } from '../schema'
 import type { DrizzleDb } from '../client'
 import { TemplateDocumentSchema, type TemplateDocument } from '../../print-core/template-model'
@@ -29,6 +29,8 @@ export interface JobFilter {
   from?: number
   to?: number
   keyword?: string
+  statuses?: JobStatus[]
+  printerName?: string
 }
 
 interface JobRow {
@@ -81,6 +83,10 @@ export class JobRepository {
     const conds: SQL[] = []
     if (filter.templateId) conds.push(eq(printJobs.templateId, filter.templateId))
     if (filter.from) conds.push(gte(printJobs.createdAt, filter.from))
+    if (filter.statuses && filter.statuses.length > 0) {
+      conds.push(inArray(printJobs.status, filter.statuses as string[]))
+    }
+    if (filter.printerName) conds.push(eq(printJobs.printerName, filter.printerName))
     const rows = this.db
       .select()
       .from(printJobs)

@@ -5,7 +5,7 @@ import dayjs, { type Dayjs } from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { clearDraft, sessionDraft } from '../session-draft'
-import type { JobListItem } from '../../../db/repositories/job-repo'
+import type { JobListItem, JobStatus } from '../../../db/repositories/job-repo'
 
 const { RangePicker } = DatePicker
 
@@ -27,6 +27,9 @@ export function HistoryPage(): JSX.Element {
   const [templateId, setTemplateId] = useState<string | undefined>(undefined)
   const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null)
   const [keyword, setKeyword] = useState('')
+  const [statuses, setStatuses] = useState<string[]>([])
+  const [printerName, setPrinterName] = useState<string | undefined>(undefined)
+  const [printerOptions, setPrinterOptions] = useState<string[]>([])
 
   async function refresh(): Promise<void> {
     setJobs(
@@ -34,13 +37,20 @@ export function HistoryPage(): JSX.Element {
         templateId,
         from: range?.[0] ? range[0].startOf('day').valueOf() : undefined,
         to: range?.[1] ? range[1].endOf('day').valueOf() : undefined,
-        keyword: keyword || undefined
+        keyword: keyword || undefined,
+        statuses: statuses.length ? (statuses as JobStatus[]) : undefined,
+        printerName
       })
     )
   }
-  useEffect(() => { void refresh() }, [templateId, range, keyword])
+  useEffect(() => { void refresh() }, [templateId, range, keyword, statuses, printerName])
   useEffect(() => {
     void api.templates.list({}).then((ts) => setTemplates(ts.map((t) => ({ id: t.id, name: t.name }))))
+  }, [])
+  useEffect(() => {
+    void api.jobs.list({}).then((all) => {
+      setPrinterOptions([...new Set(all.map((j) => j.printerName).filter(Boolean))].sort())
+    })
   }, [])
 
   function reprint(job: JobListItem): void {
@@ -97,6 +107,28 @@ export function HistoryPage(): JSX.Element {
           placeholder="搜索参数内容，如：张三" allowClear style={{ width: 220 }}
           value={keyword} onChange={(e) => setKeyword(e.target.value)}
         />
+        <Select
+          mode="multiple" allowClear placeholder="全部状态" style={{ minWidth: 150 }}
+          maxTagCount="responsive" value={statuses} onChange={(v) => setStatuses(v)}
+          options={[
+            { value: 'success', label: '成功' },
+            { value: 'failed', label: '失败' },
+            { value: 'cancelled', label: '已取消' }
+          ]}
+        />
+        <Select
+          allowClear placeholder="全部打印机" style={{ width: 170 }} value={printerName}
+          onChange={(v) => setPrinterName(v)}
+          options={printerOptions.map((n) => ({ value: n, label: n }))}
+        />
+        <Button onClick={() => {
+          setTemplateId(undefined)
+          setRange(null)
+          setKeyword('')
+          setStatuses([])
+          setPrinterName(undefined)
+        }}>重置</Button>
+        <span style={{ color: '#888' }}>共 {jobs.length} 条</span>
       </Space>
       <Table rowKey="id" size="small" columns={columns} dataSource={jobs} pagination={{ pageSize: 30 }} />
     </div>

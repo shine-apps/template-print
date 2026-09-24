@@ -33,6 +33,15 @@ export interface SubmitPrintResult {
   thumbPath: string | null
 }
 
+export interface JobListFilter {
+  templateId?: string
+  from?: number
+  to?: number
+  keyword?: string
+  statuses?: ('success' | 'failed' | 'cancelled')[]
+  printerName?: string
+}
+
 export const IPC = {
   templatesList: 'templates:list',
   templatesGet: 'templates:get',
@@ -85,7 +94,7 @@ export interface Api {
     submit(input: SubmitPrintInput): Promise<SubmitPrintResult>
   }
   jobs: {
-    list(filter?: { templateId?: string; from?: number; to?: number; keyword?: string }): Promise<JobListItem[]>
+    list(filter?: JobListFilter): Promise<JobListItem[]>
     get(id: string): Promise<JobListItem | null>
   }
   settings: {

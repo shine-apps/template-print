@@ -96,4 +96,19 @@ describe('JobRepository', () => {
     expect(jobs.list({ templateId: 't1' }).length).toBe(2)
     expect(jobs.list({ from: 1_700_000_050_000 })[0].id).toBe('j2')
   })
+
+  it('list 支持状态多选与打印机过滤的组合', () => {
+    const snap = sample('s1')
+    const mk = (id: string, status: 'failed' | 'success' | 'cancelled', printer: string, ts: number) => ({
+      id, templateId: 't1', templateNameSnapshot: '证书', templateSnapshot: snap,
+      paramValues: { name: `X${id}` }, thumbPath: null, printerName: printer, copies: 1,
+      printMode: 'silent' as const, status, errorMessage: status === 'failed' ? 'e' : null, createdAt: ts
+    })
+    jobs.insert(mk('j1', 'success', 'HP', 2000))
+    jobs.insert(mk('j2', 'failed', 'HP', 1000))
+    jobs.insert(mk('j3', 'cancelled', 'Epson', 3000))
+    expect(jobs.list({ statuses: ['failed', 'cancelled'] }).map((j) => j.id).sort()).toEqual(['j2', 'j3'])
+    expect(jobs.list({ printerName: 'HP' }).map((j) => j.id).sort()).toEqual(['j1', 'j2'])
+    expect(jobs.list({ statuses: ['success'], printerName: 'HP' }).map((j) => j.id)).toEqual(['j1'])
+  })
 })

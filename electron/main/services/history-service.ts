@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
-import { IPC } from '../../../shared/ipc-contract'
+import { IPC, type JobListFilter } from '../../../shared/ipc-contract'
 import { JobRepository, type NewJob } from '../../../db/repositories/job-repo'
 import type { Services } from '../ipc'
 
@@ -11,7 +11,7 @@ export class HistoryService {
     private jobs: JobRepository
   ) {}
 
-  list(filter?: { templateId?: string; from?: number; to?: number; keyword?: string }) {
+  list(filter?: JobListFilter) {
     return Promise.resolve(this.jobs.list(filter ?? {}))
   }
   get(id: string) {

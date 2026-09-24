@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Button, Card, Space, Tag, message } from 'antd'
+import { useCallback, useEffect, useState } from 'react'
+import { Button, Card, Modal, Select, Space, Tag, message } from 'antd'
 import { api } from '../api'
 import type { PrinterInfoDto, PrinterRuntimeStatus } from '../../../shared/ipc-contract'
 
@@ -9,6 +9,70 @@ const STATUS_META: Record<PrinterRuntimeStatus, { color: string; text: string }>
   'paper-out': { color: '#faad14', text: '缺纸/耗材' },
   error: { color: '#ff4d4f', text: '异常' },
   unknown: { color: '#bfbfbf', text: '状态未知' }
+}
+
+export function HistoryCard(): JSX.Element {
+  const [count, setCount] = useState(0)
+  const [days, setDays] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const refreshCount = useCallback(() => { void api.jobs.count().then(setCount) }, [])
+  useEffect(() => {
+    refreshCount()
+    void api.settings.get().then((s) => setDays(s.historyRetentionDays))
+  }, [refreshCount])
+
+  async function saveDays(v: number | null): Promise<void> {
+    setDays(v)
+    await api.settings.set({ historyRetentionDays: v })
+    message.success('保留设置已保存；下次启动时自动清理')
+  }
+  async function doCleanup(olderThanDays?: number): Promise<void> {
+    setBusy(true)
+    try {
+      const r = await api.jobs.cleanup({ olderThanDays })
+      message.success(`已删除 ${r.deletedJobs} 条记录、${r.deletedThumbs} 张缩略图`)
+      refreshCount()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card size="small" title="打印历史" style={{ marginBottom: 12 }}>
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <span style={{ color: '#666' }}>当前共 <b>{count}</b> 条打印记录</span>
+        <Space wrap>
+          <span>自动清理：</span>
+          <Select size="small" style={{ width: 150 }} value={days ?? 0}
+            onChange={(v: number) => void saveDays(v === 0 ? null : v)}
+            options={[
+              { value: 0, label: '不自动清理' },
+              { value: 30, label: '保留 30 天' },
+              { value: 90, label: '保留 90 天' },
+              { value: 180, label: '保留 180 天' },
+              { value: 365, label: '保留 1 年' }
+            ]} />
+        </Space>
+        <Space wrap>
+          <Button size="small" loading={busy}
+            onClick={() => Modal.confirm({
+              title: '清理 90 天前的记录？',
+              content: '将同时删除对应的缩略图文件，此操作不可恢复。',
+              okText: '清理', okButtonProps: { danger: true }, cancelText: '取消',
+              onOk: () => doCleanup(90)
+            })}>清理 90 天前</Button>
+          <Button size="small" loading={busy}
+            onClick={() => Modal.confirm({
+              title: '清空全部打印历史？',
+              content: '将删除所有记录与缩略图，此操作不可恢复。',
+              okText: '全部清空', okButtonProps: { danger: true }, cancelText: '取消',
+              onOk: () => doCleanup()
+            })}>清空全部</Button>
+        </Space>
+      </Space>
+    </Card>
+  )
 }
 
 export function SettingsPage(): JSX.Element {
@@ -46,6 +110,7 @@ export function SettingsPage(): JSX.Element {
 
   return (
     <div style={{ padding: 16, maxWidth: 720 }}>
+      <HistoryCard />
       <Space style={{ justifyContent: 'space-between', width: '100%', marginBottom: 8 }}>
         <h3 style={{ margin: 0 }}>打印机设置</h3>
         <Button size="small" loading={statusLoading} onClick={() => void loadStatus(printers)}>刷新状态</Button>

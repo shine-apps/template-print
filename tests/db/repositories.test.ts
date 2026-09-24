@@ -111,4 +111,19 @@ describe('JobRepository', () => {
     expect(jobs.list({ printerName: 'HP' }).map((j) => j.id).sort()).toEqual(['j1', 'j2'])
     expect(jobs.list({ statuses: ['success'], printerName: 'HP' }).map((j) => j.id)).toEqual(['j1'])
   })
+
+  it('deleteOlderThan/deleteAll/count', () => {
+    const snap = sample('s1')
+    const mk = (id: string, ts: number) => ({
+      id, templateId: 't1', templateNameSnapshot: '证书', templateSnapshot: snap,
+      paramValues: {}, thumbPath: null, printerName: 'HP', copies: 1,
+      printMode: 'silent' as const, status: 'success' as const, errorMessage: null, createdAt: ts
+    })
+    jobs.insert(mk('old', 1000)); jobs.insert(mk('new', 5000))
+    const removed = jobs.deleteOlderThan(2000)
+    expect(removed.map((r) => r.id)).toEqual(['old'])
+    expect(jobs.count()).toBe(1)
+    expect(jobs.deleteAll().length).toBe(1)
+    expect(jobs.count()).toBe(0)
+  })
 })

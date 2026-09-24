@@ -43,12 +43,13 @@ app.whenReady().then(() => {
   const settings = new SettingsService(p.dataDir)
   const assets = new AssetService(p.dataDir, new AssetRepository(client.db))
   const templates = new TemplateService(new TemplateRepository(client.db), assets)
-  const history = new HistoryService(p.dataDir, new JobRepository(client.db))
+  const history = new HistoryService(p.dataDir, new JobRepository(client.db), settings)
   const print = new PrintService(p.dataDir, assets, history)
   const printers = new PrinterService(p.dataDir, print)
   const services: Services = { assets, templates, history, print, printers, settings }
   const win = createWindow()
   registerIpc(win, services)
+  history.runScheduledCleanup()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

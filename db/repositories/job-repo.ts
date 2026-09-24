@@ -1,4 +1,4 @@
-import { eq, gte, desc, and, inArray, type SQL } from 'drizzle-orm'
+import { eq, gte, lt, desc, and, inArray, type SQL } from 'drizzle-orm'
 import { printJobs } from '../schema'
 import type { DrizzleDb } from '../client'
 import { TemplateDocumentSchema, type TemplateDocument } from '../../print-core/template-model'
@@ -105,5 +105,24 @@ export class JobRepository {
       )
     }
     return list
+  }
+
+  /** 删除指定时间之前（不含）的记录，返回被删行（供上层清理缩略图） */
+  deleteOlderThan(ts: number): JobRow[] {
+    const rows = this.db.select().from(printJobs).where(lt(printJobs.createdAt, ts)).all() as unknown as JobRow[]
+    this.db.delete(printJobs).where(lt(printJobs.createdAt, ts)).run()
+    return rows
+  }
+
+  /** 清空全部记录，返回被删行 */
+  deleteAll(): JobRow[] {
+    const rows = this.db.select().from(printJobs).all() as unknown as JobRow[]
+    this.db.delete(printJobs).run()
+    return rows
+  }
+
+  /** 计数 */
+  count(): number {
+    return (this.db.select().from(printJobs).all() as unknown[]).length
   }
 }

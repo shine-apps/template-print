@@ -29,7 +29,9 @@ const api = {
   },
   jobs: {
     list: (filter?: unknown) => ipcRenderer.invoke(IPC.jobsList, filter),
-    get: (id: string) => ipcRenderer.invoke(IPC.jobsGet, id)
+    get: (id: string) => ipcRenderer.invoke(IPC.jobsGet, id),
+    cleanup: (input: unknown) => ipcRenderer.invoke(IPC.jobsCleanup, input),
+    count: () => ipcRenderer.invoke(IPC.jobsCount)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),

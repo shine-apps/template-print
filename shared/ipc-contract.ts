@@ -62,6 +62,8 @@ export const IPC = {
   printSubmit: 'print:submit',
   jobsList: 'jobs:list',
   jobsGet: 'jobs:get',
+  jobsCleanup: 'jobs:cleanup',
+  jobsCount: 'jobs:count',
   thumbFileUrl: 'thumb:file-url',
   settingsGet: 'settings:get',
   settingsSet: 'settings:set'
@@ -96,6 +98,8 @@ export interface Api {
   jobs: {
     list(filter?: JobListFilter): Promise<JobListItem[]>
     get(id: string): Promise<JobListItem | null>
+    cleanup(input: { olderThanDays?: number }): Promise<{ deletedJobs: number; deletedThumbs: number }>
+    count(): Promise<number>
   }
   settings: {
     get(): Promise<AppSettingsDto>

@@ -90,6 +90,10 @@ export function DesignerPage(): JSX.Element {
       setSavingToPrint(false)
     }
   }
+  /** 无未保存修改时直接去打印（不执行保存） */
+  function goToPrint(): void {
+    nav(`/print/${doc.id}`)
+  }
   function backToPrint(): void {
     // 放入改过的工作副本；paramValues / baselineJson 保持 print 页进入时的内容
     sessionDraft.doc = doc
@@ -149,18 +153,25 @@ export function DesignerPage(): JSX.Element {
           {dirty && <span style={{ color: '#fa8c16' }}>未保存</span>}
           {mode === 'print-session'
             ? <Button type="primary" onClick={backToPrint}>完成，返回打印</Button>
-            : (
-              <>
-                <Button type="primary" onClick={save}>保存模板</Button>
-                <Tooltip title={canSaveAndPrint ? '' : (!dirty ? '没有需要保存的修改' : saveIssue ?? '模板校验未通过')}>
-                  <span style={{ display: 'inline-block' }}>
-                    <Button onClick={saveAndPrint} loading={savingToPrint} disabled={!canSaveAndPrint}>
-                      保存并去打印
-                    </Button>
-                  </span>
-                </Tooltip>
-              </>
-            )}
+            : dirty
+              ? (
+                <>
+                  <Button type="primary" onClick={save}>保存模板</Button>
+                  <Tooltip title={canSaveAndPrint ? '' : (saveIssue ?? '模板校验未通过')}>
+                    <span style={{ display: 'inline-block' }}>
+                      <Button onClick={saveAndPrint} loading={savingToPrint} disabled={!canSaveAndPrint}>
+                        保存并去打印
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </>
+              )
+              : (
+                <>
+                  <Button type="primary" onClick={save}>保存模板</Button>
+                  <Button onClick={goToPrint}>去打印</Button>
+                </>
+              )}
         </Space>
         <div style={{ flex: 1 }}><DesignerCanvas /></div>
       </div>

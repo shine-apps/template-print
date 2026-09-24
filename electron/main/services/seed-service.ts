@@ -8,8 +8,8 @@ import {
 import { loadSettings, saveSettings } from '../settings'
 import type { TemplateService } from './template-service'
 
-/** 播种版本：内置模板内容变更时递增，触发重新幂等播种 */
-export const SEED_VERSION = 'm3-v1'
+/** 播种版本：内置模板内容变更时递增，触发重新幂等播种（v2：参数改为文本 token 形态） */
+export const SEED_VERSION = 'm3-v2-params'
 /** 内置模板固定 id 前缀，便于幂等 */
 export const SEED_PREFIX = 'builtin-'
 
@@ -62,10 +62,9 @@ export function seedSpecs(): TemplateDocument[] {
       elements: [
         rect('box', 10, 10, 190, 277, 0, 0.6),
         t('title', 30, 40, 150, 16, 2, { text: '荣 誉 证 书', fontSizeMm: 12, bold: true, align: 'center' }),
-        t('line1', 30, 110, 150, 8, 2, { text: '兹证明', align: 'left' }),
-        t('p_name', 60, 130, 90, 8, 2, { text: '{{姓名}}', fontSizeMm: 6, bold: true }),
+        t('l_name', 35, 130, 140, 8, 2, { text: '兹证明 {{姓名}} 同志：' }),
         t('line2', 30, 160, 150, 8, 2, { text: '在工作中表现优异，特发此证，以资鼓励。' }),
-        t('p_date', 110, 250, 80, 8, 2, { text: '{{日期}}', fontSizeMm: 4 })
+        t('l_date', 110, 250, 80, 8, 2, { text: '{{日期}}' })
       ]
     },
     createdAt: now,
@@ -125,16 +124,19 @@ export class SeedService {
     private templates: TemplateService
   ) {}
 
-  /** 首次启动（或种子版本升级）时幂等播种内置模板 */
+  /**
+   * 首次启动（或种子版本升级）时幂等播种内置模板。
+   * 版本不匹配时按固定 id 强制 upsert 全部规格：旧版内置模板被覆盖更新，
+   * 用户自建模板 id 不同（builtin- 前缀），不受影响。
+   * 返回的 inserted 为本次实际写入（插入或覆盖）的内置模板 id。
+   */
   async seedIfNeeded(): Promise<{ inserted: string[] }> {
     const s = loadSettings(this.dataDir)
     if (s.seededTemplatesVersion === SEED_VERSION) return { inserted: [] }
     const inserted: string[] = []
     for (const doc of seedSpecs()) {
-      if (!(await this.templates.get(doc.id))) {
-        await this.templates.save(doc)
-        inserted.push(doc.id)
-      }
+      await this.templates.save(doc)
+      inserted.push(doc.id)
     }
     saveSettings(this.dataDir, { ...s, seededTemplatesVersion: SEED_VERSION })
     return { inserted }

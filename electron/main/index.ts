@@ -16,6 +16,7 @@ import { FontService } from './services/font-service'
 import { SettingsService } from './services/settings-service'
 import { BackupService } from './services/backup-service'
 import { SeedService } from './services/seed-service'
+import { UpdateService } from './services/update-service'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -52,7 +53,8 @@ app.whenReady().then(async () => {
   const fonts = new FontService()
   const backups = new BackupService(p.dataDir, p.backupsDir, client)
   const seeds = new SeedService(p.dataDir, templates)
-  const services: Services = { assets, templates, history, print, printers, fonts, settings, backups }
+  const update = UpdateService.createDefault(p.updatesDir)
+  const services: Services = { assets, templates, history, print, printers, fonts, settings, backups, update }
   const win = createWindow()
   registerIpc(win, services)
   await seeds.seedIfNeeded()

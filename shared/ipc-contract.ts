@@ -1,6 +1,11 @@
 import type { TemplateDocument } from '../print-core/template-model'
 import type { JobListItem } from '../db/repositories/job-repo'
 import type { AppSettingsDto, SettingsPatch } from './settings-dto'
+import type {
+  CheckResultPayload,
+  UpdateProgressPayload,
+  InstallFailedPayload
+} from './update-manifest'
 
 export interface PrinterInfoDto {
   name: string
@@ -76,7 +81,13 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
   backupRun: 'backup:run',
-  backupOpen: 'backup:open'
+  backupOpen: 'backup:open',
+  updateCheck: 'update:check',
+  updateDownload: 'update:download',
+  updateCancel: 'update:cancel',
+  updateInstall: 'update:install',
+  updateSkipVersion: 'update:skip-version',
+  updateOpenLogDir: 'update:open-log-dir'
 } as const
 
 export interface Api {
@@ -121,6 +132,24 @@ export interface Api {
   backups: {
     run(): Promise<string>
     openDir(): Promise<void>
+  }
+  update: {
+    check(manual: boolean): Promise<void>
+    download(): Promise<void>
+    cancel(): Promise<void>
+    install(): Promise<void>
+    skipVersion(version: string | null): Promise<void>
+    openLogDir(): Promise<void>
+    on(
+      channel: 'update:checkResult' | 'update:progress' | 'update:installFailed' | 'update:installed',
+      cb: (
+        payload:
+          | CheckResultPayload
+          | UpdateProgressPayload
+          | InstallFailedPayload
+          | { version: string }
+      ) => void
+    ): () => void
   }
   system: {
     pathForFile(file: File): string

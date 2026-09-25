@@ -12,6 +12,8 @@ export function paths() {
     mkdirSync(join(dataDir, 'thumbs'), { recursive: true })
     mkdirSync(join(dataDir, 'print-tmp'), { recursive: true })
     mkdirSync(join(dataDir, 'backups'), { recursive: true })
+    mkdirSync(join(dataDir, 'updates'), { recursive: true })
+    mkdirSync(join(dataDir, 'updates', 'downloads'), { recursive: true })
   }
   return {
     dataDir,
@@ -20,7 +22,8 @@ export function paths() {
     assetsDir: join(dataDir, 'assets'),
     thumbsDir: join(dataDir, 'thumbs'),
     printTmpDir: join(dataDir, 'print-tmp'),
-    backupsDir: join(dataDir, 'backups')
+    backupsDir: join(dataDir, 'backups'),
+    updatesDir: join(dataDir, 'updates')
   }
 }
 

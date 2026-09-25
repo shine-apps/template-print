@@ -44,6 +44,21 @@ const api = {
     run: () => ipcRenderer.invoke(IPC.backupRun),
     openDir: () => ipcRenderer.invoke(IPC.backupOpen)
   },
+  update: {
+    check: (manual: boolean) => ipcRenderer.invoke(IPC.updateCheck, manual),
+    download: () => ipcRenderer.invoke(IPC.updateDownload),
+    cancel: () => ipcRenderer.invoke(IPC.updateCancel),
+    install: () => ipcRenderer.invoke(IPC.updateInstall),
+    skipVersion: (version: string | null) => ipcRenderer.invoke(IPC.updateSkipVersion, version),
+    openLogDir: () => ipcRenderer.invoke(IPC.updateOpenLogDir),
+    on: (channel: string, cb: (payload: unknown) => void): (() => void) => {
+      const allowed = ['update:checkResult', 'update:progress', 'update:installFailed', 'update:installed']
+      if (!allowed.includes(channel)) return () => {}
+      const handler = (_e: unknown, payload: unknown) => cb(payload)
+      ipcRenderer.on(channel, handler)
+      return () => ipcRenderer.removeListener(channel, handler)
+    }
+  },
   system: {
     // File.path 自 Electron 32 起移除，渲染进程必须经此桥接（webUtils 只在主/preload 可用）
     pathForFile: (file: File) => webUtils.getPathForFile(file)

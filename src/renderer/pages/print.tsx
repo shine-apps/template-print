@@ -32,6 +32,9 @@ export function PrintPage(): JSX.Element {
 
   // 原始模板基线（用于 dirty 判定）；从调整版式返回时从草稿恢复
   const baselineRef = useRef<string>('')
+  // 已完成首次载入的路由 id。dev StrictMode 会把挂载 effect 重放一次，
+  // 第一次执行已 clearDraft()，重放会误判“模板不存在”并跳回模板页，故同 id 仅执行一次
+  const handledRef = useRef<{ id: string | undefined } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const paperHintResolve = useRef<((v: boolean) => void) | null>(null)
   const [box, setBox] = useState({ w: 0, h: 0 })
@@ -40,6 +43,8 @@ export function PrintPage(): JSX.Element {
 
   useEffect(() => {
     void (async () => {
+      if (handledRef.current && handledRef.current.id === id) return
+      handledRef.current = { id }
       let loaded: TemplateDocument | null = null
       let restoredValues: Record<string, string> | null = null
       let historyFlag = false

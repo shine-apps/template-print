@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Space, Spin, Input, Select, Tooltip, message } from 'antd'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
@@ -27,9 +27,16 @@ export function DesignerPage(): JSX.Element {
   const commit = useDesignerStore((s) => s.commit)
   const markSaved = useDesignerStore((s) => s.markSaved)
 
+  // 已完成首次载入的路由 id。dev StrictMode 会把挂载 effect 重放一次（ref 保留），
+  // 同 id 的重放直接跳过，避免 returnToPrint 在第一次执行时被复位后，
+  // 第二次重放落入“新建模板”分支；真正的 id 变化（新建后 replace 进入）不受影响
+  const handledRef = useRef<{ id: string | undefined } | null>(null)
+
   useEffect(() => {
     void (async () => {
-       // console.debug('DesignerPage', id, sessionDraft)
+      if (handledRef.current && handledRef.current.id === id) return
+      handledRef.current = { id }
+      // console.debug('DesignerPage', id, sessionDraft)
       if (sessionDraft.doc && sessionDraft.returnToPrint) {
         load(sessionDraft.doc, 'print-session')
         sessionDraft.returnToPrint = false

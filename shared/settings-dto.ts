@@ -4,6 +4,11 @@ export interface AppSettingsDto {
   historyRetentionDays: number | null
   lastBackupAt: number | null
   paperHintsConfirmed: string[]
+  autoCheckUpdates: boolean
+  skippedUpdateVersion: string | null
+  lastUpdateCheckAt: number | null
 }
 
-export type SettingsPatch = Partial<Pick<AppSettingsDto, 'historyRetentionDays' | 'paperHintsConfirmed'>>
+export type SettingsPatch = Partial<
+  Pick<AppSettingsDto, 'historyRetentionDays' | 'paperHintsConfirmed' | 'autoCheckUpdates'>
+>

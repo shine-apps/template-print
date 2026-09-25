@@ -20,7 +20,10 @@ describe('settings.json', () => {
       seededTemplatesVersion: null,
       historyRetentionDays: null,
       lastBackupAt: null,
-      paperHintsConfirmed: []
+      paperHintsConfirmed: [],
+      autoCheckUpdates: true,
+      skippedUpdateVersion: null,
+      lastUpdateCheckAt: null
     }
     saveSettings(dir, s)
     expect(loadSettings(dir).defaultPrinterName).toBe('HP LaserJet')
@@ -38,7 +41,10 @@ const base: AppSettings = {
   seededTemplatesVersion: null,
   historyRetentionDays: null,
   lastBackupAt: null,
-  paperHintsConfirmed: []
+  paperHintsConfirmed: [],
+  autoCheckUpdates: true,
+  skippedUpdateVersion: null,
+  lastUpdateCheckAt: null
 }
 
 describe('patchSettings', () => {
@@ -64,5 +70,26 @@ describe('patchSettings', () => {
     expect(s.defaultPrinterName).toBe('old')
     expect(s.paperHintsConfirmed).toEqual([])
     expect(s.historyRetentionDays).toBeNull()
+  })
+})
+
+describe('更新相关设置', () => {
+  it('新字段默认值', () => {
+    const s = loadSettings(dir)
+    expect(s.autoCheckUpdates).toBe(true)
+    expect(s.skippedUpdateVersion).toBeNull()
+    expect(s.lastUpdateCheckAt).toBeNull()
+  })
+  it('白名单允许切换 autoCheckUpdates，拒绝非法类型', () => {
+    expect(patchSettings(base, { autoCheckUpdates: false }).autoCheckUpdates).toBe(false)
+    expect(patchSettings(base, { autoCheckUpdates: 'no' as never }).autoCheckUpdates).toBe(true)
+  })
+  it('旧 settings.json 缺新字段时补默认值', () => {
+    const legacyDir = join(tmpdir(), `tp-settings-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    mkdirSync(legacyDir, { recursive: true })
+    writeFileSync(join(legacyDir, 'settings.json'), JSON.stringify({ defaultPrinterName: 'old' }))
+    const s = loadSettings(legacyDir)
+    expect(s.autoCheckUpdates).toBe(true)
+    expect(s.skippedUpdateVersion).toBeNull()
   })
 })

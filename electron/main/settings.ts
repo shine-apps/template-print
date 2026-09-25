@@ -11,6 +11,12 @@ export interface AppSettings {
   lastBackupAt: number | null
   /** 已确认不再提示的“打印机|宽x高”自定义纸张组合 */
   paperHintsConfirmed: string[]
+  /** 是否启动后自动检查更新（每日一次） */
+  autoCheckUpdates: boolean
+  /** 用户跳过的更新版本；null=未跳过 */
+  skippedUpdateVersion: string | null
+  /** 最近一次检查更新时间戳（节流用） */
+  lastUpdateCheckAt: number | null
 }
 
 const DEFAULTS: AppSettings = {
@@ -18,13 +24,17 @@ const DEFAULTS: AppSettings = {
   seededTemplatesVersion: null,
   historyRetentionDays: null,
   lastBackupAt: null,
-  paperHintsConfirmed: []
+  paperHintsConfirmed: [],
+  autoCheckUpdates: true,
+  skippedUpdateVersion: null,
+  lastUpdateCheckAt: null
 }
 
 /** 渲染端允许通过 settings:set 修改的业务键（defaultPrinterName 走专用通道） */
 export const SETTABLE_KEYS = [
   'historyRetentionDays',
-  'paperHintsConfirmed'
+  'paperHintsConfirmed',
+  'autoCheckUpdates'
 ] as const
 export type SettableKey = (typeof SETTABLE_KEYS)[number]
 
@@ -59,6 +69,8 @@ export function patchSettings(current: AppSettings, patch: Record<string, unknow
       if (Array.isArray(v) && v.every((x) => typeof x === 'string')) {
         next.paperHintsConfirmed = v as string[]
       }
+    } else if (key === 'autoCheckUpdates') {
+      if (typeof v === 'boolean') next.autoCheckUpdates = v
     }
   }
   return next

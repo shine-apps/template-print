@@ -53,7 +53,7 @@ app.whenReady().then(async () => {
   const fonts = new FontService()
   const backups = new BackupService(p.dataDir, p.backupsDir, client)
   const seeds = new SeedService(p.dataDir, templates)
-  const update = UpdateService.createDefault(p.updatesDir)
+  const update = UpdateService.createDefault(p.dataDir)
   const services: Services = { assets, templates, history, print, printers, fonts, settings, backups, update }
   const win = createWindow()
   registerIpc(win, services)

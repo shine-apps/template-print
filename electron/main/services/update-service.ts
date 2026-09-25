@@ -176,7 +176,12 @@ export class UpdateService {
       this.emitProgress({ phase: 'error', reason: 'no-manifest' })
       return
     }
-    if (this.readyFile || this.abort) return
+    // 已下载校验通过（如用户上次在安装确认点了取消）→ 直接重新进入安装确认
+    if (this.readyFile) {
+      this.emitProgress({ phase: 'ready', version: this.latest.version })
+      return
+    }
+    if (this.abort) return
     const m = this.latest
     const { part, final } = this.filePaths(m.version)
     this.abort = new AbortController()

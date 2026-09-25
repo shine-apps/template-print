@@ -12,9 +12,15 @@ export function AboutPage(): JSX.Element {
 
   useEffect(() => {
     void window.api.settings.get().then(setSettings)
+    const refresh = (): void => { void window.api.settings.get().then(setSettings) }
     // 检查结果由全局更新弹窗展示；这里仅在结果返回后结束 loading
     const off = window.api.update.on('update:checkResult', () => setChecking(false))
-    return off
+    // 更新弹窗写入跳过状态后会广播该事件
+    window.addEventListener('tp:settings-changed', refresh)
+    return () => {
+      off()
+      window.removeEventListener('tp:settings-changed', refresh)
+    }
   }, [])
 
   const checkNow = (): void => {

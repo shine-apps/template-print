@@ -2,6 +2,7 @@ import { rm, rename, stat } from 'node:fs/promises'
 import { createWriteStream, existsSync } from 'node:fs'
 import * as http from 'node:http'
 import * as https from 'node:https'
+import { pipeline } from 'node:stream/promises'
 import type { IncomingMessage } from 'node:http'
 
 export interface DownloadProgress {
@@ -14,6 +15,8 @@ export interface DownloadProgress {
 export interface DownloadHttpResponse {
   statusCode: number
   headers: Record<string, string | string[] | undefined>
+  /** 原始可读流（供 stream.pipeline 写盘） */
+  stream: IncomingMessage
   onData(cb: (chunk: Buffer) => void): void
   onEnd(cb: () => void): void
   onError(cb: (err: Error) => void): void
@@ -34,6 +37,9 @@ export class SizeMismatchError extends Error {
     super(`size-mismatch: ${actual} != ${expected}`); this.name = 'SizeMismatchError'
   }
 }
+export class DownloadIdleError extends Error {
+  constructor() { super('download-idle-timeout'); this.name = 'DownloadIdleError' }
+}
 
 /** Content-Range: bytes start-end/total → total；无法解析返回 null */
 export function parseContentRange(v: string | undefined): number | null {
@@ -48,12 +54,13 @@ function headerString(h: Record<string, string | string[] | undefined>, name: st
   return Array.isArray(v) ? v[0] : v
 }
 
-type RawResponse = Pick<IncomingMessage, 'statusCode' | 'headers' | 'on' | 'destroy' | 'pause' | 'resume'>
+type RawResponse = Pick<IncomingMessage, 'statusCode' | 'headers' | 'on' | 'destroy'>
 
 function adapt(res: RawResponse): DownloadHttpResponse {
   return {
     statusCode: res.statusCode ?? 0,
     headers: res.headers,
+    stream: res as unknown as IncomingMessage,
     onData: (cb) => res.on('data', (c) => cb(c as Buffer)),
     onEnd: (cb) => res.on('end', cb),
     onError: (cb) => res.on('error', cb),
@@ -73,7 +80,6 @@ export async function electronNetRequest(
     const req = net.request(url)
     if (rangeStart !== null) req.setHeader('Range', `bytes=${rangeStart}-`)
     signal.addEventListener('abort', () => {
-      // Electron net 的 ClientRequest 用 abort()（其类型不暴露 destroy）
       req.abort()
       reject(new DownloadCanceled())
     }, { once: true })
@@ -115,6 +121,8 @@ export interface StreamDownloadOptions {
   onProgress?: (p: DownloadProgress) => void
   /** 重试次数（不含首次），默认 2（共 3 次尝试） */
   retries?: number
+  /** 两次数据之间最长等待（毫秒），超时重试；默认 30s */
+  idleMs?: number
   sleep?: (ms: number) => Promise<void>
 }
 
@@ -123,13 +131,14 @@ const BACKOFF = [500, 1500, 4000]
 /**
  * 断点续传下载：
  * 有 .part 发 Range；206→追加；200/其他→删 .part 全量重下。
- * 网络错误/5xx 退避重试；abort → DownloadCanceled（保留 .part）。
+ * pipeline 处理背压；网络错误/5xx/空闲超时退避重试；abort → DownloadCanceled（保留 .part）。
  * 完成后 expectedSize 软校验（SizeMismatchError 不重试），.part 重命名为最终文件。
  */
 export async function streamDownload(opts: StreamDownloadOptions): Promise<{ path: string; bytes: number }> {
   const {
     url, partPath, finalPath, expectedSize, requestFn, signal, onProgress,
     retries = 2,
+    idleMs = 30000,
     sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   } = opts
   let lastErr: Error | undefined
@@ -161,37 +170,35 @@ export async function streamDownload(opts: StreamDownloadOptions): Promise<{ pat
       let downloaded = startOffset
       const t0 = Date.now()
       let lastEmit = 0
+      let lastDataAt = Date.now()
+      const raw = res.stream
 
-      const out = createWriteStream(partPath, { flags: append ? 'a' : 'w' })
-      const raw = res as unknown as IncomingMessage
-      await new Promise<void>((resolve, reject) => {
-        out.on('error', reject)
-        res.onData((chunk) => {
-          downloaded += chunk.length
-          const now = Date.now()
-          if (onProgress && now - lastEmit >= 200) {
-            lastEmit = now
-            const elapsed = Math.max(1, now - t0)
-            onProgress({ downloaded, total, bytesPerMs: downloaded / elapsed })
-          }
-          if (!out.write(chunk)) {
-            // 背压：暂停响应，drain 后恢复
-            raw.pause()
-            out.once('drain', () => raw.resume())
-          }
-        })
-        res.onEnd(() => out.end(() => resolve()))
-        res.onError((err) => {
-          out.destroy()
-          reject(signal.aborted ? new DownloadCanceled() : err)
-        })
-        signal.addEventListener('abort', () => {
-          res.destroy()
-          out.destroy()
-          reject(new DownloadCanceled())
-        }, { once: true })
+      // 进度监听（独立于 pipeline，不干扰背压）
+      raw.on('data', (chunk: Buffer) => {
+        downloaded += chunk.length
+        lastDataAt = Date.now()
+        const now = Date.now()
+        if (onProgress && now - lastEmit >= 200) {
+          lastEmit = now
+          const elapsed = Math.max(1, now - t0)
+          onProgress({ downloaded, total, bytesPerMs: downloaded / elapsed })
+        }
       })
 
+      const out = createWriteStream(partPath, { flags: append ? 'a' : 'w' })
+      // 空闲超时：长时间无数据则销毁流进入重试
+      const idleWatcher = setInterval(() => {
+        if (Date.now() - lastDataAt > idleMs) raw.destroy(new DownloadIdleError())
+      }, 1000)
+      signal.addEventListener('abort', () => raw.destroy(new DownloadCanceled()), { once: true })
+
+      try {
+        await pipeline(raw, out)
+      } finally {
+        clearInterval(idleWatcher)
+      }
+
+      if (signal.aborted) throw new DownloadCanceled()
       onProgress?.({ downloaded, total, bytesPerMs: downloaded / Math.max(1, Date.now() - t0) })
 
       if (expectedSize !== undefined && downloaded !== expectedSize) {

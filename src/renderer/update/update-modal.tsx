@@ -125,7 +125,10 @@ export function UpdateModal(): JSX.Element | null {
               <Button type="primary" onClick={startDownload}>立即更新</Button>
               <Button onClick={() => setView({ kind: 'closed' })}>稍后更新</Button>
               <Button type="link" danger onClick={() => {
-                void window.api.update.skipVersion(view.manifest.version)
+                void window.api.update.skipVersion(view.manifest.version).then(() => {
+                  // 通知关于页等设置消费者刷新（跳过状态由主进程写入 settings.json）
+                  window.dispatchEvent(new Event('tp:settings-changed'))
+                })
                 message.info(`已跳过 v${view.manifest.version}，可在"关于我们"中恢复检查`)
                 setView({ kind: 'closed' })
               }}>跳过此版本</Button>

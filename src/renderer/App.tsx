@@ -7,6 +7,7 @@ import { PrintPage } from './pages/print'
 import { HistoryPage } from './pages/history'
 import { SettingsPage } from './pages/settings'
 import { AboutPage } from './pages/about'
+import { UpdateModal } from './update/update-modal'
 
 const { Sider, Content } = Layout
 
@@ -20,38 +21,41 @@ function Shell(): JSX.Element {
     : loc.pathname.startsWith('/print') ? '/print'
     : '/templates'
   return (
-    <Layout style={{ height: '100vh' }}>
-      <Sider theme="dark" width={150}>
-        <div style={{ color: '#fff', fontWeight: 700, textAlign: 'left', padding: '16px 10px', fontSize: 18 }}>模板打印</div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[selected]}
-          onClick={(e) => nav(e.key)}
-          items={[
-            { key: '/templates', label: '模板列表' },
-            { key: '/designer', label: '模板设计' },
-            { key: '/print', label: '开始打印' },
-            { key: '/history', label: '打印历史' },
-            { key: '/settings', label: '打印机设置' },
-            { key: '/about', label: '关于我们' }
-          ]}
-        />
-      </Sider>
-      <Content style={{ background: '#f5f5f5' }}>
-        <Routes>
-          <Route path="/templates" element={<TemplatesPage />} />
-          <Route path="/designer/:id" element={<DesignerPage />} />
-          <Route path="/designer" element={<DesignerPage />} />
-          <Route path="/print/:id" element={<PrintPage />} />
-          <Route path="/print" element={<PrintPage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="*" element={<Navigate to="/templates" replace />} />
-        </Routes>
-      </Content>
-    </Layout>
+    <>
+      <Layout style={{ height: '100vh' }}>
+        <Sider theme="dark" width={150}>
+          <div style={{ color: '#fff', fontWeight: 700, textAlign: 'left', padding: '16px 10px', fontSize: 18 }}>模板打印</div>
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[selected]}
+            onClick={(e) => nav(e.key)}
+            items={[
+              { key: '/templates', label: '模板列表' },
+              { key: '/designer', label: '模板设计' },
+              { key: '/print', label: '开始打印' },
+              { key: '/history', label: '打印历史' },
+              { key: '/settings', label: '打印机设置' },
+              { key: '/about', label: '关于我们' }
+            ]}
+          />
+        </Sider>
+        <Content style={{ background: '#f5f5f5' }}>
+          <Routes>
+            <Route path="/templates" element={<TemplatesPage />} />
+            <Route path="/designer/:id" element={<DesignerPage />} />
+            <Route path="/designer" element={<DesignerPage />} />
+            <Route path="/print/:id" element={<PrintPage />} />
+            <Route path="/print" element={<PrintPage />} />
+            <Route path="/history" element={<HistoryPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="*" element={<Navigate to="/templates" replace />} />
+          </Routes>
+        </Content>
+      </Layout>
+      <UpdateModal />
+    </>
   )
 }
 

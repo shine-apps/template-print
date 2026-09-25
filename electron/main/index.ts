@@ -18,6 +18,8 @@ import { BackupService } from './services/backup-service'
 import { SeedService } from './services/seed-service'
 import { UpdateService } from './services/update-service'
 
+let mainWindow: BrowserWindow | null = null
+
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
@@ -37,33 +39,62 @@ function createWindow(): BrowserWindow {
   } else {
     void win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+  win.on('closed', () => {
+    mainWindow = null
+  })
+  mainWindow = win
   return win
 }
 
-app.whenReady().then(async () => {
-  const p = paths()
-  const client = createDb(p.dbFile)
-  runMigrations(client)
-  const settings = new SettingsService(p.dataDir)
-  const assets = new AssetService(p.dataDir, new AssetRepository(client.db))
-  const templates = new TemplateService(new TemplateRepository(client.db), assets)
-  const history = new HistoryService(p.dataDir, new JobRepository(client.db), settings)
-  const print = new PrintService(p.dataDir, assets, history)
-  const printers = new PrinterService(p.dataDir, print)
-  const fonts = new FontService()
-  const backups = new BackupService(p.dataDir, p.backupsDir, client)
-  const seeds = new SeedService(p.dataDir, templates)
-  const update = UpdateService.createDefault(p.dataDir)
-  const services: Services = { assets, templates, history, print, printers, fonts, settings, backups, update }
-  const win = createWindow()
-  registerIpc(win, services)
-  await seeds.seedIfNeeded()
-  history.runScheduledCleanup()
-  void backups.runDaily()
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+/**
+ * 单实例：第二个实例启动时 requestSingleInstanceLock() 失败、立即退出；
+ * 已运行的实例收到 second-instance 事件，把主窗口恢复并提到前台。
+ */
+function activateMainWindow(): void {
+  const win = mainWindow ?? BrowserWindow.getAllWindows()[0] ?? null
+  if (!win) return
+
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+  win.moveTop()
+}
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  // 已有实例运行：第二实例立即退出，不创建任何窗口
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    activateMainWindow()
   })
-})
+
+  app.whenReady().then(async () => {
+    const p = paths()
+    const client = createDb(p.dbFile)
+    runMigrations(client)
+    const settings = new SettingsService(p.dataDir)
+    const assets = new AssetService(p.dataDir, new AssetRepository(client.db))
+    const templates = new TemplateService(new TemplateRepository(client.db), assets)
+    const history = new HistoryService(p.dataDir, new JobRepository(client.db), settings)
+    const print = new PrintService(p.dataDir, assets, history)
+    const printers = new PrinterService(p.dataDir, print)
+    const fonts = new FontService()
+    const backups = new BackupService(p.dataDir, p.backupsDir, client)
+    const seeds = new SeedService(p.dataDir, templates)
+    const update = UpdateService.createDefault(p.dataDir)
+    const services: Services = { assets, templates, history, print, printers, fonts, settings, backups, update }
+    createWindow()
+    registerIpc(mainWindow!, services)
+    await seeds.seedIfNeeded()
+    history.runScheduledCleanup()
+    void backups.runDaily()
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      else activateMainWindow()
+    })
+  })
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

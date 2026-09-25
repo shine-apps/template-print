@@ -33,17 +33,17 @@ export function PropertyPanel({ onCommitted }: { onCommitted: () => void }): JSX
       {el && (
         <Space direction="vertical" style={{ width: '100%' }} size="small">
           <Space wrap>
-            X <InputNumber size="small" style={{ width: 80 }} value={Number(el.x.toFixed(1))} addonAfter="mm"
-              onChange={(v) => geo({ x: v ?? 0 })} />
-            Y <InputNumber size="small" style={{ width: 80 }} value={Number(el.y.toFixed(1))} addonAfter="mm"
-              onChange={(v) => geo({ y: v ?? 0 })} />
-            宽 <InputNumber size="small" style={{ width: 80 }} value={Number(el.w.toFixed(1))} addonAfter="mm"
-              onChange={(v) => geo({ w: Math.max(1, v ?? 1) })} />
-            高 <InputNumber size="small" style={{ width: 80 }} value={Number(el.h.toFixed(1))} addonAfter="mm"
-              onChange={(v) => geo({ h: Math.max(1, v ?? 1) })} />
-            旋转 <InputNumber size="small" style={{ width: 80 }} min={-180} max={180} step={15}
+            <div style={{ display: 'inline-flex', alignItems: 'center' }}><span>X: </span> <InputNumber size="small" style={{ width: 100 }} value={Number(el.x.toFixed(1))} addonAfter="mm"
+              onChange={(v) => geo({ x: v ?? 0 })} /></div>
+            <div style={{ display: 'inline-flex', alignItems: 'center' }}><span>Y: </span> <InputNumber size="small" style={{ width: 100 }} value={Number(el.y.toFixed(1))} addonAfter="mm"
+              onChange={(v) => geo({ y: v ?? 0 })} /></div>
+            <div style={{ display: 'inline-flex', alignItems: 'center' }}><span>宽: </span> <InputNumber size="small" style={{ width: 100 }} value={Number(el.w.toFixed(1))} addonAfter="mm"
+              onChange={(v) => geo({ w: Math.max(1, v ?? 1) })} /></div>
+            <div style={{ display: 'inline-flex', alignItems: 'center' }}><span>高: </span> <InputNumber size="small" style={{ width: 100 }} value={Number(el.h.toFixed(1))} addonAfter="mm"
+              onChange={(v) => geo({ h: Math.max(1, v ?? 1) })} /></div>
+            <div style={{ display: 'inline-flex', alignItems: 'center' }}><span>旋转: </span> <InputNumber size="small" style={{ width: 100 }} min={-180} max={180} step={15}
               value={Number(el.rotation.toFixed(1))} addonAfter="°"
-              onChange={(v) => geo({ rotation: v ?? 0 })} />
+              onChange={(v) => geo({ rotation: v ?? 0 })} /></div>
           </Space>
           <Space>
             锁定 <Switch size="small" checked={el.locked} onChange={(v) => geo({ locked: v })} />

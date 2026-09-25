@@ -1,5 +1,5 @@
 import { useRef, type ChangeEvent } from 'react'
-import { Button, Dropdown, Space } from 'antd'
+import { Button, Dropdown, Space, message } from 'antd'
 import { createElement } from '../../../print-core/template-model'
 import { useDesignerStore } from '../store/designer-store'
 
@@ -7,6 +7,7 @@ export function ElementLibrary(): JSX.Element {
   const addElement = useDesignerStore((s) => s.addElement)
   const commit = useDesignerStore((s) => s.commit)
   const doc = useDesignerStore((s) => s.doc)
+  const mode = useDesignerStore((s) => s.mode)
   const fileRef = useRef<HTMLInputElement>(null)
 
   function add(type: 'text' | 'shape', props?: Record<string, unknown>): void {
@@ -30,6 +31,12 @@ export function ElementLibrary(): JSX.Element {
   }
 
   async function pickImage(): Promise<void> {
+    // 新模板首次保存前只有内存临时 id（tpl_new_*），此时上传会把资产挂到被丢弃的 id 下，
+    // 保存换真实 id 后图片失效；要求先保存模板再添加图片。
+    if (mode === 'new-template') {
+      message.warning('请先点击「保存模板」完成新建，再添加图片')
+      return
+    }
     fileRef.current?.click()
   }
 
@@ -37,7 +44,7 @@ export function ElementLibrary(): JSX.Element {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    // 新模板可能尚未保存过：先确保模板在库（create 时已入库，故 id 可用）
+    // 模板此前已保存，id 为库中真实 id，资产可正常挂载
     const { assetId } = await window.api.assets.import({
       templateId: doc.id,
       sourcePath: window.api.system.pathForFile(file)

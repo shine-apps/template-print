@@ -17,6 +17,7 @@ function Shell(): JSX.Element {
     : loc.pathname.startsWith('/settings') ? '/settings'
     : loc.pathname.startsWith('/about') ? '/about'
     : loc.pathname.startsWith('/designer') ? '/designer'
+    : loc.pathname.startsWith('/print') ? '/print'
     : '/templates'
   return (
     <Layout style={{ height: '100vh' }}>
@@ -30,9 +31,10 @@ function Shell(): JSX.Element {
           items={[
             { key: '/templates', label: '模板列表' },
             { key: '/designer', label: '模板设计' },
+            { key: '/print', label: '开始打印' },
             { key: '/history', label: '打印历史' },
             { key: '/settings', label: '打印机设置' },
-            { key: '/about', label: '关于' }
+            { key: '/about', label: '关于我们' }
           ]}
         />
       </Sider>

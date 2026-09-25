@@ -59,6 +59,11 @@ export function PrintPage(): JSX.Element {
         clearDraft()
       } else if (id) {
         loaded = await api.templates.get(id)
+      } else {
+        // 从左侧菜单直接进入：未指定模板，引导回模板列表选择
+        message.info('请先从模板列表选择要打印的模板')
+        nav('/templates')
+        return
       }
       if (!loaded) { message.error('模板不存在'); nav('/templates'); return }
 

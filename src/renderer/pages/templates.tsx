@@ -5,7 +5,6 @@ import {
 import { MoreOutlined, PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { NewTemplateModal } from '../components/new-template-modal'
 import type { TemplateDocument } from '../../../print-core/template-model'
 
 export function TemplatesPage(): JSX.Element {
@@ -13,7 +12,6 @@ export function TemplatesPage(): JSX.Element {
   const [docs, setDocs] = useState<TemplateDocument[]>([])
   const [keyword, setKeyword] = useState('')
   const [category, setCategory] = useState<string | undefined>(undefined)
-  const [modalOpen, setModalOpen] = useState(false)
   const [renaming, setRenaming] = useState<TemplateDocument | null>(null)
   const [renameVal, setRenameVal] = useState('')
 
@@ -48,7 +46,7 @@ export function TemplatesPage(): JSX.Element {
           options={categories.map((c) => ({ value: c, label: c }))} />
         <Input.Search placeholder="搜索模板名称" allowClear style={{ width: 220 }} value={keyword}
           onChange={(e) => setKeyword(e.target.value)} />
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>新建模板</Button>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => nav('/designer')}>新建模板</Button>
         <Button onClick={async () => {
           const r = await api.templates.importTplx()
           if (!r.canceled) { message.success('模板已导入'); void refresh() }
@@ -101,9 +99,6 @@ export function TemplatesPage(): JSX.Element {
             })}
           </div>
         )}
-
-      <NewTemplateModal open={modalOpen} onClose={() => setModalOpen(false)}
-        onCreated={(id) => { setModalOpen(false); nav(`/designer/${id}`) }} />
 
       <Modal title="重命名" open={!!renaming} onOk={saveRename} onCancel={() => setRenaming(null)}>
         <Input value={renameVal} onChange={(e) => setRenameVal(e.target.value)} onPressEnter={saveRename} />

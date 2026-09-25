@@ -9,17 +9,14 @@ import { DesignerCanvas } from '../designer/canvas'
 import { ElementLibrary } from '../designer/element-library'
 import { LayersPanel } from '../designer/layers-panel'
 import { PropertyPanel } from '../designer/property-panel'
-import { NewTemplateModal } from '../components/new-template-modal'
-import { TemplateDocumentSchema } from '../../../print-core/template-model'
+import { TemplateDocumentSchema, createTemplate, localId } from '../../../print-core/template-model'
 
 export function DesignerPage(): JSX.Element {
   const { id } = useParams()
   const nav = useNavigate()
   const [loading, setLoading] = useState(true)
-  // 无 sessionDraft 且无模板 id（直接点「模板设计」菜单进入）时立即弹新建模板窗
-  const [createOpen, setCreateOpen] = useState(false)
-  // 「保存并去打印」进行中
-  const [savingToPrint, setSavingToPrint] = useState(false)
+  // 保存/保存并去打印进行中（同时防止新模板重复创建）
+  const [saving, setSaving] = useState(false)
   const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([])
   const doc = useDesignerStore((s) => s.doc)
   const mode = useDesignerStore((s) => s.mode)
@@ -46,9 +43,9 @@ export function DesignerPage(): JSX.Element {
         if (!got) { message.error('模板不存在'); nav('/templates'); return }
         load(got, 'template')
       } else {
-        // 既无打印会话草稿也无模板 id：弹出新建模板窗（不跳走，由弹窗决定去向）
-        setCreateOpen(true)
-        return
+        // 无 id：直接载入未持久化的 A4 空白模板（内存临时态），首次保存时才在库中创建
+        const draft = createTemplate(localId('tpl_new'), '未命名模板', { widthMm: 210, heightMm: 297 })
+        load(draft, 'new-template')
       }
       setLoading(false)
     })()
@@ -69,37 +66,55 @@ export function DesignerPage(): JSX.Element {
     const r = TemplateDocumentSchema.safeParse(doc)
     return r.success ? null : (r.error.issues[0]?.message ?? '模板校验未通过')
   }, [doc])
-  const canSaveAndPrint = dirty && !saveIssue
+  // 新模板（未持久化）即使未做修改也允许保存/去打印；已存模板要求有修改
+  const canSaveAndPrint = (dirty || mode === 'new-template') && !saveIssue
+  const isNew = mode === 'new-template'
 
-  /** 保存当前模板；成功返回 true，失败弹错误提示并返回 false（调用方不得继续跳转） */
-  async function save(): Promise<boolean> {
+  /**
+   * 保存当前模板；成功返回模板 id，失败弹错误提示并返回 null（调用方不得继续跳转）。
+   * new-template 模式（未持久化）首次保存：先按当前名称/纸张 create，再写入完整工作副本。
+   */
+  async function save(): Promise<string | null> {
     const parsed = TemplateDocumentSchema.safeParse(doc)
     if (!parsed.success) {
       message.error('保存失败：' + (parsed.error.issues[0]?.message ?? '模板校验未通过'))
-      return false
+      return null
     }
+    setSaving(true)
     try {
-      await api.templates.save(parsed.data)
+      let target = parsed.data
+      if (mode === 'new-template') {
+        const created = await api.templates.create({
+          name: target.name,
+          widthMm: target.paper.widthMm,
+          heightMm: target.paper.heightMm
+        })
+        target = { ...target, id: created.id, createdAt: created.createdAt, updatedAt: created.updatedAt }
+      }
+      await api.templates.save(target)
       markSaved()
       message.success('已保存')
-      return true
+      return target.id
     } catch (e) {
       message.error('保存失败：' + (e instanceof Error ? e.message : String(e)))
-      return false
+      return null
+    } finally {
+      setSaving(false)
     }
   }
 
-  async function saveAndPrint(): Promise<void> {
-    setSavingToPrint(true)
-    try {
-      const ok = await save()
-      // 保存失败已提示，且不跳转打印页
-      if (ok) nav(`/print/${doc.id}`)
-    } finally {
-      setSavingToPrint(false)
-    }
+  /** 保存（新模板先创建）后留在设计器，并把地址替换为真实 id（重载后转为 template 模式） */
+  async function saveAndStay(): Promise<void> {
+    const savedId = await save()
+    if (savedId && mode === 'new-template') nav(`/designer/${savedId}`, { replace: true })
   }
-  /** 无未保存修改时直接去打印（不执行保存） */
+
+  /** 保存（新模板先创建）后跳转打印页 */
+  async function saveAndPrint(): Promise<void> {
+    const savedId = await save()
+    if (savedId) nav(`/print/${savedId}`)
+  }
+  /** 已存模板且无修改：直接去打印（不执行保存） */
   function goToPrint(): void {
     nav(`/print/${doc.id}`)
   }
@@ -121,6 +136,9 @@ export function DesignerPage(): JSX.Element {
   const paperPresetId = PAPER_PRESETS.find(
     (p) => p.widthMm === doc.paper.widthMm && p.heightMm === doc.paper.heightMm
   )?.id ?? '__custom__'
+
+  // 第二行字段（名称/纸张/分类）左侧标签的统一样式，保证视觉对齐
+  const fieldLabelStyle = { color: '#666', fontSize: 13, whiteSpace: 'nowrap' } as const
 
   const paperEditor = (
     <Space direction="vertical" size={8} style={{ width: 230 }}>
@@ -162,88 +180,83 @@ export function DesignerPage(): JSX.Element {
     nav('/print')
   }
 
-  const createModal = (
-    <NewTemplateModal
-      open={createOpen}
-      onClose={() => nav('/templates')}
-      onCreated={(newId) => {
-        // 创建成功：关弹窗并进入该模板的设计器（replace，避免后退又回到无 id 状态再次弹窗）
-        setCreateOpen(false)
-        nav(`/designer/${newId}`, { replace: true })
-      }}
-    />
-  )
-
-  if (loading) return (
-    <>
-      {createModal}
-      <Spin style={{ display: 'block', marginTop: 80 }} />
-    </>
-  )
+  if (loading) return <Spin style={{ display: 'block', marginTop: 80 }} />
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
-      <div style={{ width: 200, background: '#1f2937', color: '#fff', padding: 8, overflow: 'auto' }}>
+      <div style={{ minWidth: 150, width: 200, background: '#1f2937', color: '#fff', padding: 8, overflow: 'auto' }}>
         <ElementLibrary />
         <LayersPanel />
       </div>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <Space style={{ background: '#fff', padding: 8, borderBottom: '1px solid #eee' }}>
-          <Button onClick={() => { useDesignerStore.getState().undo() }}>撤销</Button>
-          <Button onClick={() => { useDesignerStore.getState().redo() }}>重做</Button>
-          <Input variant="outlined" style={{ width: 140 }} value={doc.name}
-            onChange={(e) => useDesignerStore.getState().mutate((d) => { d.name = e.target.value })} />
-          <Popover trigger="click" placement="bottomLeft" title="纸张尺寸" content={paperEditor}>
-            <Button size="small" title="点击修改纸张尺寸">
-              {doc.paper.widthMm}×{doc.paper.heightMm}mm
-            </Button>
-          </Popover>
-          <Select style={{ width: 130 }} placeholder="分类" allowClear showSearch
-            value={doc.category || undefined}
-            onChange={(v) => useDesignerStore.getState().mutate((d) => { d.category = v ?? '' })}
-            options={categoryOptions}
-            dropdownRender={(menu) => (<>
-              {menu}
-              <div style={{ padding: 4, borderTop: '1px solid #eee' }}>
-                <Input size="small" placeholder="输入新分类后回车"
-                  onPressEnter={(e) => {
-                    const v = (e.target as HTMLInputElement).value.trim()
-                    if (v && !categoryOptions.some((c) => c.value === v)) {
-                      setCategoryOptions((o) => [...o, { value: v, label: v }])
-                    }
-                    useDesignerStore.getState().mutate((d) => { d.category = v })
-                  }} />
-              </div>
-            </>)} />
-          {dirty && <span style={{ color: '#fa8c16' }}>未保存</span>}
-          {mode === 'print-session'
-            ? <Button type="primary" onClick={backToPrint}>完成，返回打印</Button>
-            : dirty
-              ? (
-                <>
-                  <Button type="primary" onClick={save}>保存模板</Button>
-                  <Tooltip title={canSaveAndPrint ? '' : (saveIssue ?? '模板校验未通过')}>
-                    <span style={{ display: 'inline-block' }}>
-                      <Button onClick={saveAndPrint} loading={savingToPrint} disabled={!canSaveAndPrint}>
-                        保存并去打印
-                      </Button>
-                    </span>
-                  </Tooltip>
-                </>
-              )
-              : (
-                <>
-                  <Button type="primary" onClick={save}>保存模板</Button>
-                  <Button onClick={goToPrint}>去打印</Button>
-                </>
-              )}
-        </Space>
+        <div style={{ background: '#fff', padding: 8, borderBottom: '1px solid #eee' }}>
+          <Space size={24} style={{ marginTop: 8, marginRight: 16 }}>
+            <Space size={6}>
+              <span style={fieldLabelStyle}>名称</span>
+              <Input variant="outlined" style={{ width: 200 }} value={doc.name}
+                onChange={(e) => useDesignerStore.getState().mutate((d) => { d.name = e.target.value })} />
+            </Space>
+            <Space size={6}>
+              <span style={fieldLabelStyle}>纸张</span>
+              <Popover trigger="click" placement="bottomLeft" title="纸张尺寸" content={paperEditor}>
+                <Button size="small" title="点击修改纸张尺寸">
+                  {doc.paper.widthMm}×{doc.paper.heightMm}mm
+                </Button>
+              </Popover>
+            </Space>
+            <Space size={6}>
+              <span style={fieldLabelStyle}>分类</span>
+              <Select style={{ width: 130 }} placeholder="分类" allowClear showSearch
+                value={doc.category || undefined}
+                onChange={(v) => useDesignerStore.getState().mutate((d) => { d.category = v ?? '' })}
+                options={categoryOptions}
+                dropdownRender={(menu) => (<>
+                  {menu}
+                  <div style={{ padding: 4, borderTop: '1px solid #eee' }}>
+                    <Input size="small" placeholder="输入新分类后回车"
+                      onPressEnter={(e) => {
+                        const v = (e.target as HTMLInputElement).value.trim()
+                        if (v && !categoryOptions.some((c) => c.value === v)) {
+                          setCategoryOptions((o) => [...o, { value: v, label: v }])
+                        }
+                        useDesignerStore.getState().mutate((d) => { d.category = v })
+                      }} />
+                  </div>
+                </>)} />
+            </Space>
+          </Space>
+          <Space style={{ marginTop: 8 }}>
+            <Button onClick={() => { useDesignerStore.getState().undo() }}>撤销</Button>
+            <Button onClick={() => { useDesignerStore.getState().redo() }}>重做</Button>
+            {dirty && <span style={{ color: '#fa8c16' }}>未保存</span>}
+            {mode === 'print-session'
+              ? <Button type="primary" onClick={backToPrint}>完成，返回打印</Button>
+              : (dirty || isNew)
+                ? (
+                  <>
+                    <Button type="primary" loading={saving} onClick={saveAndStay}>保存模板</Button>
+                    <Tooltip title={canSaveAndPrint ? '' : (saveIssue ?? '模板校验未通过')}>
+                      <span style={{ display: 'inline-block' }}>
+                        <Button onClick={saveAndPrint} loading={saving} disabled={!canSaveAndPrint}>
+                          保存并去打印
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  </>
+                )
+                : (
+                  <>
+                    <Button type="primary" onClick={saveAndStay}>保存模板</Button>
+                    <Button onClick={goToPrint}>去打印</Button>
+                  </>
+                )}
+          </Space>
+        </div>
         <div style={{ flex: 1 }}><DesignerCanvas /></div>
       </div>
-      <div style={{ width: 300, background: '#fff', borderLeft: '1px solid #eee', overflow: 'auto' }}>
+      <div style={{ minWidth: 200, width: 300, background: '#fff', borderLeft: '1px solid #eee', overflow: 'auto' }}>
         <PropertyPanel onCommitted={commit} />
       </div>
-      {createModal}
     </div>
   )
 }

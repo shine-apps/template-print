@@ -7,7 +7,8 @@ import {
   type ParamDef
 } from '../../../print-core/template-model'
 
-type Mode = 'template' | 'print-session'
+// new-template=无 id 进入时载入的未持久化空白模板，首次保存时才在库中创建
+type Mode = 'template' | 'print-session' | 'new-template'
 
 interface DesignerState {
   doc: TemplateDocument

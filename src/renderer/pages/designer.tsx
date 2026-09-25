@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Space, Spin, Input, Select, Tooltip, message } from 'antd'
+import { Button, Space, Spin, Input, InputNumber, Select, Tooltip, Popover, message } from 'antd'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { useDesignerStore } from '../store/designer-store'
 import { sessionDraft } from '../session-draft'
+import { PAPER_PRESETS } from '../../../shared/paper-presets'
 import { DesignerCanvas } from '../designer/canvas'
 import { ElementLibrary } from '../designer/element-library'
 import { LayersPanel } from '../designer/layers-panel'
@@ -102,6 +103,58 @@ export function DesignerPage(): JSX.Element {
   function goToPrint(): void {
     nav(`/print/${doc.id}`)
   }
+
+  /**
+   * 修改纸张尺寸（mm）。元素不随纸张缩放：超界元素保留原位，打印时按各自元素框裁剪。
+   * 经 mutate 落库：自动标脏、进撤销栈、走 zod 校验（宽高须为正数）。
+   */
+  function changePaper(widthMm: number | null, heightMm: number | null): void {
+    const w = widthMm ?? 0
+    const h = heightMm ?? 0
+    if (w <= 0 || h <= 0) return
+    useDesignerStore.getState().mutate((d) => {
+      d.paper.widthMm = w
+      d.paper.heightMm = h
+    })
+  }
+  /** 当前尺寸命中预设则返回其 id，否则 '__custom__' */
+  const paperPresetId = PAPER_PRESETS.find(
+    (p) => p.widthMm === doc.paper.widthMm && p.heightMm === doc.paper.heightMm
+  )?.id ?? '__custom__'
+
+  const paperEditor = (
+    <Space direction="vertical" size={8} style={{ width: 230 }}>
+      <Select
+        size="small"
+        style={{ width: '100%' }}
+        value={paperPresetId}
+        onChange={(v) => {
+          if (v === '__custom__') return
+          const p = PAPER_PRESETS.find((x) => x.id === v)
+          if (p) changePaper(p.widthMm, p.heightMm)
+        }}
+        options={[
+          ...PAPER_PRESETS.map((p) => ({ value: p.id, label: `${p.name}（${p.widthMm}×${p.heightMm}mm）` })),
+          { value: '__custom__', label: '自定义尺寸（毫米）' }
+        ]}
+      />
+      <Space>
+        宽
+        <InputNumber size="small" min={5} max={2000} step={1} addonAfter="mm"
+          style={{ width: 100 }} value={doc.paper.widthMm}
+          onChange={(v) => changePaper(v, doc.paper.heightMm)} />
+      </Space>
+      <Space>
+        高
+        <InputNumber size="small" min={5} max={2000} step={1} addonAfter="mm"
+          style={{ width: 100 }} value={doc.paper.heightMm}
+          onChange={(v) => changePaper(doc.paper.widthMm, v)} />
+      </Space>
+      <span style={{ color: '#999', fontSize: 12, lineHeight: 1.4 }}>
+        元素不随纸张缩放；超出新边界的内容将在打印时被裁剪。
+      </span>
+    </Space>
+  )
   function backToPrint(): void {
     // 放入改过的工作副本；paramValues / baselineJson 保持 print 页进入时的内容
     sessionDraft.doc = doc
@@ -138,9 +191,13 @@ export function DesignerPage(): JSX.Element {
         <Space style={{ background: '#fff', padding: 8, borderBottom: '1px solid #eee' }}>
           <Button onClick={() => { useDesignerStore.getState().undo() }}>撤销</Button>
           <Button onClick={() => { useDesignerStore.getState().redo() }}>重做</Button>
-          <Input variant="outlined" style={{ width: 200 }} value={doc.name}
+          <Input variant="outlined" style={{ width: 140 }} value={doc.name}
             onChange={(e) => useDesignerStore.getState().mutate((d) => { d.name = e.target.value })} />
-          <span style={{ color: '#888' }}>{doc.paper.widthMm}×{doc.paper.heightMm}mm</span>
+          <Popover trigger="click" placement="bottomLeft" title="纸张尺寸" content={paperEditor}>
+            <Button size="small" title="点击修改纸张尺寸">
+              {doc.paper.widthMm}×{doc.paper.heightMm}mm
+            </Button>
+          </Popover>
           <Select style={{ width: 130 }} placeholder="分类" allowClear showSearch
             value={doc.category || undefined}
             onChange={(v) => useDesignerStore.getState().mutate((d) => { d.category = v ?? '' })}

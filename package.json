@@ -1,6 +1,6 @@
 {
   "name": "template-print",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "description": "可视化模板设计与打印桌面程序",
   "main": "out/main/index.js",

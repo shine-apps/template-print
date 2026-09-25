@@ -6,6 +6,7 @@ import { DesignerPage } from './pages/designer'
 import { PrintPage } from './pages/print'
 import { HistoryPage } from './pages/history'
 import { SettingsPage } from './pages/settings'
+import { AboutPage } from './pages/about'
 
 const { Sider, Content } = Layout
 
@@ -14,6 +15,7 @@ function Shell(): JSX.Element {
   const loc = useLocation()
   const selected = loc.pathname.startsWith('/history') ? '/history'
     : loc.pathname.startsWith('/settings') ? '/settings'
+    : loc.pathname.startsWith('/about') ? '/about'
     : loc.pathname.startsWith('/designer') ? '/designer'
     : '/templates'
   return (
@@ -29,7 +31,8 @@ function Shell(): JSX.Element {
             { key: '/templates', label: '模板列表' },
             { key: '/designer', label: '模板设计' },
             { key: '/history', label: '打印历史' },
-            { key: '/settings', label: '打印机设置' }
+            { key: '/settings', label: '打印机设置' },
+            { key: '/about', label: '关于' }
           ]}
         />
       </Sider>
@@ -42,6 +45,7 @@ function Shell(): JSX.Element {
           <Route path="/print" element={<PrintPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/about" element={<AboutPage />} />
           <Route path="*" element={<Navigate to="/templates" replace />} />
         </Routes>
       </Content>

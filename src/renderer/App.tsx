@@ -19,7 +19,7 @@ function Shell(): JSX.Element {
   return (
     <Layout style={{ height: '100vh' }}>
       <Sider theme="dark" width={150}>
-        <div style={{ color: '#fff', fontWeight: 700, textAlign: 'center', padding: '16px 0' }}>模板打印</div>
+        <div style={{ color: '#fff', fontWeight: 700, textAlign: 'left', padding: '16px 10px', fontSize: 18 }}>模板打印</div>
         <Menu
           theme="dark"
           mode="inline"

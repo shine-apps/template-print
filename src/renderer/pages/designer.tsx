@@ -29,6 +29,7 @@ export function DesignerPage(): JSX.Element {
 
   useEffect(() => {
     void (async () => {
+       // console.debug('DesignerPage', id, sessionDraft)
       if (sessionDraft.doc && sessionDraft.returnToPrint) {
         load(sessionDraft.doc, 'print-session')
         sessionDraft.returnToPrint = false

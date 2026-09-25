@@ -74,8 +74,8 @@ export function TemplatesPage(): JSX.Element {
                     </div>
                   }
                   actions={[
-                    <a key="use" onClick={() => nav(`/print/${d.id}`)}>去打印</a>,
-                    <a key="edit" onClick={() => nav(`/designer/${d.id}`)}>编辑</a>,
+                    <Button type="link"  key="use" onClick={() => nav(`/print/${d.id}`)}>去打印</Button>,
+                    <Button type="link"  key="edit" onClick={() => nav(`/designer/${d.id}`)}>编辑</Button>,
                     <Dropdown key="more" menu={{ items: [
                       { key: 'dup', label: '复制', onClick: () => onDuplicate(d) },
                       { key: 'export', label: '导出', onClick: () => api.templates.export(d.id) },

@@ -15,6 +15,7 @@ if ($LASTEXITCODE -ne 0) { throw 'electron-vite build failed' }
 
 $env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://cdn.npmmirror.com/binaries/electron-builder-binaries/'
 Write-Host '== electron-builder (nsis) =='
-npx electron-builder --win nsis
+# --publish never：本地只打包不发布；GitHub Release 由 CI 的 action-gh-release 上传
+npx electron-builder --win nsis --publish never
 if ($LASTEXITCODE -ne 0) { throw 'electron-builder failed' }
 Write-Host 'DONE'

@@ -1,0 +1,83 @@
+name: Release
+
+# 推送 v* 标签自动发布；也可在 Actions 页手动触发（输入版本号）
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（不含 v，如 0.2.0）；须已与 package.json / app-info.ts 一致'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build NSIS & publish GitHub Release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve version (tag or manual input)
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if ($env:EVENT_NAME -eq 'workflow_dispatch') {
+            $tag = 'v' + $env:INPUT_VERSION
+          } else {
+            $tag = $env:REF_NAME
+          }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Invalid version tag: $tag (expected vX.Y.Z)"
+          }
+          "TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+          "VERSION=$($tag.Substring(1))" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+          Write-Host "Publishing $tag"
+
+      - name: Verify versions are consistent
+        run: node scripts/release/check-version.mjs $env:VERSION
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npx vitest run
+
+      - name: Build (electron-vite)
+        run: npx electron-vite build
+
+      - name: Package NSIS installer
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Extract release notes for this version
+        run: node scripts/release/prepare-notes.mjs $env:VERSION
+
+      - name: Generate latest.json (size + sha256)
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File ./scripts/build-update-manifest.ps1
+
+      - name: Create/update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: 模板打印 ${{ env.TAG }}
+          body_path: release/release-notes.txt
+          files: |
+            release/*Setup*x64.exe
+            release/latest.json
+          fail_on_unmatched_files: true

@@ -2,7 +2,8 @@
 node_modules/
 dist/
 out/
-release/
+# 仅忽略根目录打包产物；scripts/release、tests/release 是源码目录
+/release/
 
 # 脑暴可视化伴侣本地产物
 .superpowers/

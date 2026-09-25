@@ -1,5 +1,7 @@
 appId: com.local.template-print
 productName: TemplatePrint
+# 固定产物命名（无空格、含架构），供 latest.json 引用与 GitHub Release 资产匹配
+artifactName: ${productName}-${version}-Setup-${arch}.${ext}
 # better-sqlite3 13（N-API）二进制跨 Node/Electron 通用，无需重编译、无需 ABI 切换
 npmRebuild: false
 directories:

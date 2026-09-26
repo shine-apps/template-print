@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { createTemplate, createElement, createParamDef } from '../../print-core/template-model'
 import { renderPrintDocument } from '../../print-core/render-print-document'
 import { EMPTY_LINE_TOKEN } from '../../print-core/param-evaluator'
-import { SYSTEM_FONT_STACK } from '../../print-core/text-layout'
+import { SYSTEM_FONT_STACK } from '../../print-core/text-style'
 
 function baseDoc(elements: ReturnType<typeof createElement>[]) {
   const tpl = createTemplate('t', 'x', { widthMm: 40, heightMm: 30 })

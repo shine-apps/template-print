@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { mmToPxAt96 } from '../../../shared/units'
-import { SYSTEM_FONT_STACK } from '../../../print-core/text-layout'
+import { SYSTEM_FONT_STACK } from '../../../print-core/text-style'
 import type { TemplateDocument, TemplateElement } from '../../../print-core/template-model'
 
 /** 卡片封面高度（px），与模板卡片网格协调 */

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { Slider } from 'antd'
 import { Stage, Layer, Rect, Image as KImage, Line, Ellipse, Group, Transformer } from 'react-konva'
 import type Konva from 'konva'
@@ -6,7 +7,7 @@ import { mmToPxAt96 } from '../../../shared/units'
 import { useDesignerStore } from '../store/designer-store'
 import type { TemplateElement } from '../../../print-core/template-model'
 import { snapPosition, type MovingRect } from './guides'
-import { LaidText } from './laid-text'
+import { textCssProps } from '../../../print-core/text-style'
 
 function useLoadedImage(url: string | undefined): HTMLImageElement | undefined {
   const [img, setImg] = useState<HTMLImageElement | undefined>()
@@ -20,13 +21,31 @@ function useLoadedImage(url: string | undefined): HTMLImageElement | undefined {
 }
 
 const MM = (v: number, scale: number): number => mmToPxAt96(v) * scale
+// 纸张原点在 Stage 中的偏移（Layer offset 与 DOM 层共用）
+const ORIGIN = 40
 // 直线/椭圆用 Group 包装（Group 的 x/y 即左上角），Group 无 width/height，
 // 这类元素只支持拖动改坐标，尺寸由右侧属性面板修改。
 function isGroupWrapped(el: TemplateElement): boolean {
   return el.type === 'shape' && el.props.shape !== 'rect'
 }
 
-function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls, onDragMove, onDragEnd }: {
+type TextEl = Extract<TemplateElement, { type: 'text' }>
+
+/** 按 zIndex 顺序把元素切成连续的「图形段/文本段」，用于 canvas 层与 DOM 文本层交错 */
+type Seg = { kind: 'shapes' | 'texts'; els: TemplateElement[]; index: number }
+function buildSegments(all: TemplateElement[]): Seg[] {
+  const segs: Seg[] = []
+  all.forEach((el, i) => {
+    const kind: Seg['kind'] = el.type === 'text' ? 'texts' : 'shapes'
+    const last = segs[segs.length - 1]
+    if (last && last.kind === kind) last.els.push(el)
+    else segs.push({ kind, els: [el], index: i })
+  })
+  return segs
+}
+
+/** 非文本元素（图片/形状）的 Konva 渲染与交互，与原 ElementShape 一致 */
+function NonTextShape({ el, scale, selected, onSelect, onChange, assetUrls, onDragMove, onDragEnd }: {
   el: TemplateElement
   scale: number
   selected: boolean
@@ -38,8 +57,6 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls, onDr
 }): JSX.Element {
   const shapeRef = useRef<Konva.Node>(null)
   const trRef = useRef<Konva.Transformer>(null)
-  const { updateProps } = useDesignerStore()
-  // hooks 必须在所有条件分支之前无条件调用
   const imageEl = useLoadedImage(el.type === 'image' ? assetUrls[el.props.assetId] : undefined)
 
   useEffect(() => {
@@ -104,15 +121,7 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls, onDr
   }
 
   let body: JSX.Element
-  if (el.type === 'text') {
-    body = (
-      <LaidText el={el} scale={scale} shapeRef={shapeRef as never} commonProps={common}
-        onEdit={() => {
-          const v = window.prompt('编辑文本', el.props.text)
-          if (v !== null) updateProps(el.id, { text: v })
-        }} />
-    )
-  } else if (el.type === 'shape') {
+  if (el.type === 'shape') {
     const stk = MM(el.props.strokeWidthMm, scale)
     if (el.props.shape === 'line') {
       // Group 定位在左上角；内部 Line 相对 Group 画水平中线，不接收指针事件
@@ -179,11 +188,100 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls, onDr
   )
 }
 
+/**
+ * DOM 文本元素：样式与打印端 textCssProps 完全同源（同 Chromium CSS 排版），
+ * 保证设计器=预览=打印一致。pointer-events:none，交互全部由 hit Layer 的透明 Rect 承担。
+ */
+function TextDom({ el, scale, registerRef }: {
+  el: TextEl
+  scale: number
+  registerRef: (id: string, node: HTMLDivElement | null) => void
+}): JSX.Element {
+  const { outer, inner } = textCssProps(el.props)
+  const boxStyle: CSSProperties = {
+    position: 'absolute',
+    boxSizing: 'border-box',
+    left: ORIGIN + MM(el.x, scale),
+    top: ORIGIN + MM(el.y, scale),
+    width: MM(el.w, scale),
+    height: MM(el.h, scale),
+    transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+    transformOrigin: '50% 50%',
+    pointerEvents: 'none'
+  }
+  return (
+    <div ref={(d) => registerRef(el.id, d)} style={boxStyle}>
+      <div style={outer as CSSProperties}>
+        {inner
+          ? <div style={inner as CSSProperties}>{el.props.text}</div>
+          : el.props.text}
+      </div>
+    </div>
+  )
+}
+
+/** 文本元素的透明热区：选中/拖拽/缩放/旋转/双击编辑 */
+function TextHit({ el, scale, selected, onSelect, onEdit, onChange, onSyncDom }: {
+  el: TextEl
+  scale: number
+  selected: boolean
+  onSelect: () => void
+  onEdit: () => void
+  onChange: (patch: Partial<Pick<TemplateElement, 'x' | 'y' | 'w' | 'h' | 'rotation'>>) => void
+  onSyncDom: (el: TemplateElement, node: Konva.Node) => void
+}): JSX.Element {
+  const rectRef = useRef<Konva.Rect>(null)
+  const trRef = useRef<Konva.Transformer>(null)
+  useEffect(() => {
+    if (selected && rectRef.current && trRef.current) {
+      trRef.current.nodes([rectRef.current])
+      trRef.current.getLayer()?.batchDraw()
+    }
+  }, [selected])
+  return (
+    <>
+      <Rect
+        ref={rectRef}
+        id={el.id}
+        x={MM(el.x, scale)}
+        y={MM(el.y, scale)}
+        width={MM(el.w, scale)}
+        height={MM(el.h, scale)}
+        rotation={el.rotation}
+        draggable={!el.locked}
+        fill="transparent"
+        onClick={onSelect}
+        onTap={onSelect}
+        onDblClick={onEdit}
+        onDragMove={(e) => onSyncDom(el, e.target)}
+        onTransform={(e) => onSyncDom(el, e.target)}
+        onTransformEnd={(e) => {
+          const node = e.target
+          onChange({
+            x: node.x() / mmToPxAt96(1) / scale,
+            y: node.y() / mmToPxAt96(1) / scale,
+            w: Math.max(1, node.width() * node.scaleX() / mmToPxAt96(1) / scale),
+            h: Math.max(1, node.height() * node.scaleY() / mmToPxAt96(1) / scale),
+            rotation: Math.round(node.rotation() * 10) / 10
+          })
+          node.scaleX(1); node.scaleY(1)
+        }}
+      />
+      {selected && (
+        <Transformer ref={trRef}
+          boundBoxFunc={(oldBox, newBox) =>
+            newBox.width < 4 || newBox.height < 4 ? oldBox : newBox} />
+      )}
+    </>
+  )
+}
+
 export function DesignerCanvas(): JSX.Element {
   const doc = useDesignerStore((s) => s.doc)
   const selectedId = useDesignerStore((s) => s.selectedId)
   const select = useDesignerStore((s) => s.select)
   const updateGeometry = useDesignerStore((s) => s.updateGeometry)
+  const updateProps = useDesignerStore((s) => s.updateProps)
   const commit = useDesignerStore((s) => s.commit)
   const removeElement = useDesignerStore((s) => s.removeElement)
   const [scale, setScale] = useState(1)
@@ -201,11 +299,25 @@ export function DesignerCanvas(): JSX.Element {
 
   const pw = MM(doc.paper.widthMm, scale)
   const ph = MM(doc.paper.heightMm, scale)
-  const sorted = [...doc.content.elements].sort((a, b) => a.zIndex - b.zIndex)
+  const sorted = useMemo(
+    () => [...doc.content.elements].sort((a, b) => a.zIndex - b.zIndex),
+    [doc.content.elements]
+  )
+  const segs = useMemo(() => buildSegments(sorted), [sorted])
+  const textEls = sorted.filter((e): e is TextEl => e.type === 'text')
 
   // 背景层（纸张+网格+边框）引用，用于缓存：网格线可能上万条，
   // 缓存后拖拽/变换元素时只需 blit 位图，不再逐线重绘。
   const bgLayerRef = useRef<Konva.Layer>(null)
+  // Portal 目标：Konva Stage 的 content div（canvas 的同级容器，文本 div 注入其中参与 z-index 排序）
+  const stageRef = useRef<Konva.Stage>(null)
+  const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null)
+  // 文本 DOM 节点引用：拖拽/变换时命令式同步位置，避免每帧 React 重渲染
+  const textDomRefs = useRef(new Map<string, HTMLDivElement>())
+  const registerTextRef = (id: string, node: HTMLDivElement | null): void => {
+    if (node) textDomRefs.current.set(id, node)
+    else textDomRefs.current.delete(id)
+  }
 
   const gridLines = useMemo(() => {
     if (!gridOn) return null
@@ -236,7 +348,24 @@ export function DesignerCanvas(): JSX.Element {
     }
   }, [pw, ph, scale, gridOn])
 
+  // Stage mount 后取 content 节点用于 portal
+  useEffect(() => {
+    setContentEl((stageRef.current?.content as HTMLDivElement | undefined) ?? null)
+  }, [])
+
+  /** 拖拽/变换中把 Konva 节点的实时几何同步给文本 DOM（仅视觉跟随，onEnd 才落 store） */
+  function syncTextDom(el: TemplateElement, node: Konva.Node): void {
+    const div = textDomRefs.current.get(el.id)
+    if (!div) return
+    div.style.left = `${ORIGIN + node.x()}px`
+    div.style.top = `${ORIGIN + node.y()}px`
+    div.style.width = `${node.width() * node.scaleX()}px`
+    div.style.height = `${node.height() * node.scaleY()}px`
+    div.style.transform = `rotate(${node.rotation()}deg)`
+  }
+
   function handleDragMove(el: TemplateElement, node: Konva.Node): void {
+    syncTextDom(el, node)
     const moving: MovingRect = {
       x: node.x() / mmToPxAt96(1) / scale,
       y: node.y() / mmToPxAt96(1) / scale,
@@ -253,6 +382,8 @@ export function DesignerCanvas(): JSX.Element {
     )
     if (Math.abs(r.x - moving.x) > 0.001) node.x(MM(r.x, scale))
     if (Math.abs(r.y - moving.y) > 0.001) node.y(MM(r.y, scale))
+    // snap 可能修正了坐标，再同步一次
+    syncTextDom(el, node)
     setGuides({ v: r.guidesV, h: r.guidesH })
   }
 
@@ -262,6 +393,11 @@ export function DesignerCanvas(): JSX.Element {
       y: node.y() / mmToPxAt96(1) / scale
     })
     setGuides({ v: [], h: [] })
+  }
+
+  function editText(el: TextEl): void {
+    const v = window.prompt('编辑文本', el.props.text)
+    if (v !== null) updateProps(el.id, { text: v })
   }
 
   return (
@@ -285,24 +421,37 @@ export function DesignerCanvas(): JSX.Element {
           <input type="checkbox" checked={gridOn} onChange={(e) => setGridOn(e.target.checked)} /> 网格(2mm)
         </label>
       </div>
-      <Stage width={Math.max(pw + 80, 400)} height={Math.max(ph + 80, 400)}
+      <Stage ref={stageRef} width={Math.max(pw + 80, 400)} height={Math.max(ph + 80, 400)}
         onMouseDown={(e) => { if (e.target === e.target.getStage()) select(null) }}>
-        {/* 背景层：纸张 + 边框 + 网格，缓存为位图避免大纸张网格拖拽时重绘 */}
-        <Layer ref={bgLayerRef} offsetX={-40} offsetY={-40}>
+        {/* 背景层：纸张 + 边框 + 网格，缓存为位图避免大纸张网格拖拽时重绘（z-index 最底） */}
+        <Layer ref={(l) => { if (l) l.zIndex(0) }} offsetX={-ORIGIN} offsetY={-ORIGIN}>
           <Rect x={-1} y={-1} width={pw + 2} height={ph + 2}
             stroke="#444" strokeWidth={2} fill="transparent" listening={false} />
           <Rect x={0} y={0} width={pw} height={ph} fill="#ffffff" shadowBlur={6} shadowOpacity={0.2} />
           {gridLines}
         </Layer>
-        {/* 前景层：元素 + 吸附辅助线，随交互实时重绘 */}
-        <Layer offsetX={-40} offsetY={-40}>
-          {sorted.map((el) => (
-            <ElementShape key={el.id} el={el} scale={scale} selected={el.id === selectedId}
+        {/* 图形段：连续的非文本元素归一段 Layer；z-index 与文本 DOM 层交错（段 index*2+2） */}
+        {segs.filter((s) => s.kind === 'shapes').map((seg) => (
+          <Layer key={`shapes-${seg.index}`} offsetX={-ORIGIN} offsetY={-ORIGIN}
+            ref={(l) => { if (l) l.zIndex(seg.index * 2 + 2) }}>
+            {seg.els.map((el) => (
+              <NonTextShape key={el.id} el={el} scale={scale} selected={el.id === selectedId}
+                onSelect={() => select(el.id)}
+                onChange={(patch) => updateGeometry(el.id, patch)}
+                assetUrls={assetUrls}
+                onDragMove={handleDragMove}
+                onDragEnd={handleDragEnd} />
+            ))}
+          </Layer>
+        ))}
+        {/* 文本热区层：透明 Rect 承担交互，空白处自动穿透到下层图形 canvas */}
+        <Layer ref={(l) => { if (l) l.zIndex(9999) }} offsetX={-ORIGIN} offsetY={-ORIGIN}>
+          {textEls.map((el) => (
+            <TextHit key={el.id} el={el} scale={scale} selected={el.id === selectedId}
               onSelect={() => select(el.id)}
+              onEdit={() => editText(el)}
               onChange={(patch) => updateGeometry(el.id, patch)}
-              assetUrls={assetUrls}
-              onDragMove={handleDragMove}
-              onDragEnd={handleDragEnd} />
+              onSyncDom={syncTextDom} />
           ))}
           {guides.v.map((gx) => (
             <Line key={`av${gx}`} listening={false}
@@ -314,6 +463,18 @@ export function DesignerCanvas(): JSX.Element {
           ))}
         </Layer>
       </Stage>
+      {/* DOM 文本层：portal 注入 Stage content，与各 canvas 同级，z-index 段 index*2+3 */}
+      {contentEl && createPortal(
+        segs.filter((s) => s.kind === 'texts').map((seg) => (
+          <div key={`texts-${seg.index}`}
+            style={{ position: 'absolute', inset: 0, zIndex: seg.index * 2 + 3, overflow: 'hidden' }}>
+            {(seg.els as TextEl[]).map((el) => (
+              <TextDom key={el.id} el={el} scale={scale} registerRef={registerTextRef} />
+            ))}
+          </div>
+        )),
+        contentEl
+      )}
     </div>
   )
 }

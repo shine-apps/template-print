@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { join } from 'node:path'
+import { APP_NAME } from '../../shared/app-info'
 import { paths } from './app-paths'
 import { createDb } from '../../db/client'
 import { runMigrations } from '../../db/migrate'
@@ -26,6 +27,8 @@ function createWindow(): BrowserWindow {
     height: 820,
     minWidth: 1024,
     minHeight: 700,
+    // 标题栏显示应用名+版本，如 "模板打印 v0.2.0"
+    title: `${APP_NAME} V${app.getVersion()}`,
     // 窗口左上角与任务栏图标；app.getAppPath() 在 dev 指向项目根、打包后指向 app.asar，
     // 两者下 resources/icon.png 都存在（electron-builder.yml 的 files 已将 resources/** 打入包）
     icon: join(app.getAppPath(), 'resources', 'icon.png'),

@@ -1,7 +1,8 @@
 appId: com.local.template-print
-productName: TemplatePrint
-# 固定产物命名（无空格、含架构），供 latest.json 引用与 GitHub Release 资产匹配
-artifactName: ${productName}-${version}-Setup-${arch}.${ext}
+# 安装后应用名（exe、安装目录、开始菜单、快捷方式）；artifactName 单独硬编码为 ASCII 以兼容 GitHub Release/URL
+productName: 模板打印
+# 安装包文件名固定 ASCII（productName 含中文，不能用 ${productName} 插值，否则文件名含中文）
+artifactName: TemplatePrint-${version}-Setup-${arch}.${ext}
 # better-sqlite3 13（N-API）二进制跨 Node/Electron 通用，无需重编译、无需 ABI 切换
 npmRebuild: false
 directories:
@@ -26,5 +27,9 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
+  # 桌面与开始菜单快捷方式显示名（中文）
+  shortcutName: 模板打印
+  # 控制面板"添加/删除程序"中的显示名（中文）
+  uninstallDisplayName: 模板打印
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico

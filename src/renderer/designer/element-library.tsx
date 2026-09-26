@@ -44,15 +44,24 @@ export function ElementLibrary(): JSX.Element {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    // 先读图片原始比例，插入时按比例初始化元素框（宽度固定 40mm，高度按比例推算）
+    const ratio = await new Promise<number>((resolve) => {
+      const url = URL.createObjectURL(file)
+      const img = new Image()
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img.naturalWidth / img.naturalHeight) }
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(1) }
+      img.src = url
+    })
     // 模板此前已保存，id 为库中真实 id，资产可正常挂载
     const { assetId } = await window.api.assets.import({
       templateId: doc.id,
       sourcePath: window.api.system.pathForFile(file)
     })
+    const w = 40
     const el = createElement(
       'image',
       { assetId, fit: 'contain', opacity: 1 },
-      { x: 20, y: 60, w: 40, h: 40 }
+      { x: 20, y: 60, w, h: +(w / ratio).toFixed(2) }
     )
     addElement(el)
     commit()

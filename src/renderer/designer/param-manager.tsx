@@ -107,7 +107,11 @@ function ParamEditModal({ def, isNew, otherNames, onOk, onCancel }: {
         {f.type === 'date' && (
           <Form.Item label="日期格式">
             <Select value={f.dateFormat} onChange={(v) => setF({ ...f, dateFormat: v })}
-              options={['yyyy-MM-dd', 'yyyy/MM/dd', 'yyyy年M月d日'].map((v) => ({ value: v, label: v }))} />
+              options={[
+                'yyyy-MM-dd', 'yyyy/MM/dd', 'yyyy年M月d日',
+                'MM-dd', 'MM/dd', 'M月d日',
+                'yyyy-MM', 'yyyy/MM', 'yyyy年M月'
+              ].map((v) => ({ value: v, label: v }))} />
           </Form.Item>
         )}
         {f.type === 'number' && (

@@ -28,10 +28,9 @@ export function TemplatesPage(): JSX.Element {
     message.success('已删除')
     void refresh()
   }
-  async function onDuplicate(d: TemplateDocument): Promise<void> {
-    const copy = await api.templates.duplicate(d.id)
-    message.success('已复制')
-    nav(`/designer/${copy.id}`)
+  function onDuplicate(d: TemplateDocument): void {
+    // 不立即入库：跳转到设计器并带 duplicate 参数，由设计器构建内存草稿，等用户保存后才入库
+    nav(`/designer/${d.id}?duplicate=1`)
   }
   async function saveRename(): Promise<void> {
     if (!renaming || !renameVal.trim()) return

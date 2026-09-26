@@ -103,11 +103,12 @@ export function layoutText(
 
   if (!vertical) {
     const contentH = round2(rawLines.length * pitch)
+    const offsetY = round2(Math.max(0, (boxH - contentH) / 2))
     rawLines.forEach((ln, i) => {
       let startX = 0
       if (st.align === 'center') startX = round2((boxW - ln.cross) / 2)
       else if (st.align === 'right') startX = round2(boxW - ln.cross)
-      const y = round2(i * pitch)
+      const y = round2(offsetY + i * pitch)
       let cx = startX
       const chars: LaidChar[] = ln.cells.map((c) => {
         const lc = { ch: c.ch, x: round2(cx), y, rotated: false }

@@ -34,12 +34,6 @@ describe('TemplateService', () => {
     expect(tpl.paper.widthMm).toBe(40)
     expect((await svc.list({})).length).toBe(1)
   })
-  it('duplicate 生成新 id 与“xxx 副本”名称，元素与参数一并复制并重新分配 id', async () => {
-    const a = await svc.create({ name: '证书', widthMm: 210, heightMm: 297 })
-    const copy = await svc.duplicate(a.id)
-    expect(copy.id).not.toBe(a.id)
-    expect(copy.name).toBe('证书 副本')
-  })
   it('delete 删除模板（资产清理由 AssetService 承担，服务被调用不抛错）', async () => {
     const a = await svc.create({ name: 'x', widthMm: 40, heightMm: 30 })
     await svc.remove(a.id)

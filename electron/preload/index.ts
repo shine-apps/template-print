@@ -7,7 +7,6 @@ const api = {
     get: (id: string) => ipcRenderer.invoke(IPC.templatesGet, id),
     create: (input: unknown) => ipcRenderer.invoke(IPC.templatesCreate, input),
     save: (doc: unknown) => ipcRenderer.invoke(IPC.templatesSave, doc),
-    duplicate: (id: string) => ipcRenderer.invoke(IPC.templatesDuplicate, id),
     delete: (id: string) => ipcRenderer.invoke(IPC.templatesDelete, id),
     export: (id: string) => ipcRenderer.invoke(IPC.templatesExport, id),
     importTplx: () => ipcRenderer.invoke(IPC.templatesImport)
@@ -15,7 +14,8 @@ const api = {
   assets: {
     import: (input: unknown) => ipcRenderer.invoke(IPC.assetsImport, input),
     dataUrl: (id: string) => ipcRenderer.invoke(IPC.assetsDataUrl, id),
-    listUrls: (templateId: string) => ipcRenderer.invoke(IPC.assetsListUrls, templateId)
+    listUrls: (templateId: string) => ipcRenderer.invoke(IPC.assetsListUrls, templateId),
+    listUrlsByIds: (ids: string[]) => ipcRenderer.invoke(IPC.assetsListUrlsByIds, ids)
   },
   printers: {
     list: () => ipcRenderer.invoke(IPC.printersList),

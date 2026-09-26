@@ -41,22 +41,22 @@ export function LayersPanel(): JSX.Element {
           style={{
             background: el.id === selectedId ? '#2563eb' : '#374151',
             borderRadius: 4, padding: '4px 6px', marginBottom: 3, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6, fontSize: 12
+            display: 'flex', alignItems: 'center', gap: 6, fontSize: 14
           }}>
           <span style={{ flex: 1 }}>
             {el.type === 'text'
               ? (el.props.direction === 'vertical' ? '文本（竖）' : '文本（横）')
               : LABEL[el.type]}
           </span>
-          <button title="锁定/解锁" onClick={(e) => {
+          <button style={{ color: '#000' }} title="锁定/解锁" onClick={(e) => {
             e.stopPropagation()
             updateGeometry(el.id, { locked: !el.locked }); commit()
           }}>{el.locked ? '🔒' : '🔓'}</button>
-          <button title="置顶" onClick={(e) => {
+          <button style={{ color: '#000' }} title="置顶" onClick={(e) => {
             e.stopPropagation()
             updateGeometry(el.id, { zIndex: Math.max(0, ...doc.content.elements.map((x) => x.zIndex)) + 1 }); commit()
           }}>↑</button>
-          <button title="删除" onClick={(e) => {
+          <button style={{ color: 'red' }} title="删除" onClick={(e) => {
             e.stopPropagation(); removeElement(el.id); commit()
           }}>×</button>
         </div>

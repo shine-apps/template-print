@@ -59,13 +59,13 @@ export const IPC = {
   templatesGet: 'templates:get',
   templatesCreate: 'templates:create',
   templatesSave: 'templates:save',
-  templatesDuplicate: 'templates:duplicate',
   templatesDelete: 'templates:delete',
   templatesExport: 'templates:export',
   templatesImport: 'templates:import',
   assetsImport: 'assets:import',
   assetsDataUrl: 'assets:data-url',
   assetsListUrls: 'assets:list-urls',
+  assetsListUrlsByIds: 'assets:list-urls-by-ids',
   printersList: 'printers:list',
   printersGetDefault: 'printers:get-default',
   printersSetDefault: 'printers:set-default',
@@ -95,8 +95,7 @@ export interface Api {
     list(filter?: { category?: string; keyword?: string }): Promise<TemplateDocument[]>
     get(id: string): Promise<TemplateDocument | null>
     create(input: NewTemplateInput): Promise<TemplateDocument>
-    save(doc: TemplateDocument): Promise<void>
-    duplicate(id: string): Promise<TemplateDocument>
+    save(doc: TemplateDocument): Promise<TemplateDocument>
     delete(id: string): Promise<void>
     export(id: string): Promise<{ canceled: boolean; path?: string }>
     importTplx(): Promise<{ canceled: boolean; id?: string }>
@@ -105,6 +104,7 @@ export interface Api {
     import(input: { templateId: string; sourcePath: string }): Promise<{ assetId: string }>
     dataUrl(assetId: string): Promise<string>
     listUrls(templateId: string): Promise<Record<string, string>>
+    listUrlsByIds(ids: string[]): Promise<Record<string, string>>
   }
   printers: {
     list(): Promise<PrinterInfoDto[]>

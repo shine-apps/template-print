@@ -35,29 +35,20 @@ export class TemplateService {
     this.repo.upsert(doc)
     return doc
   }
-  async save(doc: TemplateDocument): Promise<void> {
+  async save(doc: TemplateDocument): Promise<TemplateDocument> {
     const parsed = TemplateDocumentSchema.parse({ ...doc, updatedAt: Date.now() })
+    // 若图片元素引用的资产属于其他模板（如从其他模板复制来的草稿），
+    // 复制一份到本模板并重新分配 assetId，确保模板自包含、删除原模板不影响副本。
+    for (const el of parsed.content.elements) {
+      if (el.type === 'image') {
+        const asset = this.assets.repo.get(el.props.assetId)
+        if (asset && asset.templateId !== parsed.id) {
+          el.props.assetId = this.assets.copyAsset(el.props.assetId, parsed.id)
+        }
+      }
+    }
     this.repo.upsert(parsed)
-  }
-  async duplicate(id: string): Promise<TemplateDocument> {
-    const src = this.repo.getById(id)
-    if (!src) throw new Error('模板不存在')
-    // v2：参数没有独立 id，副本直接沿用参数名称（副本是全新模板，名称不冲突）；
-    // 元素重新分配元素 id；图片资产不复制文件，副本直接过滤掉图片元素。
-    const now = Date.now()
-    const copy: TemplateDocument = TemplateDocumentSchema.parse({
-      ...structuredClone(src),
-      id: localId('tpl'),
-      name: `${src.name} 副本`,
-      isBuiltin: false,
-      createdAt: now,
-      updatedAt: now
-    })
-    copy.content.elements = structuredClone(src)
-      .content.elements.filter((el) => el.type !== 'image')
-      .map((el) => ({ ...el, id: localId('el') }))
-    this.repo.upsert(copy)
-    return copy
+    return parsed
   }
   async remove(id: string): Promise<void> {
     this.assets.purgeForTemplate(id)
@@ -127,8 +118,6 @@ export function registerTemplateHandlers(deps: Services): void {
   ipcMain.handle(IPC.templatesCreate, (_e, input: NewTemplateInput) => svc.create(input))
   ipcMain.removeHandler(IPC.templatesSave)
   ipcMain.handle(IPC.templatesSave, (_e, doc: TemplateDocument) => svc.save(doc))
-  ipcMain.removeHandler(IPC.templatesDuplicate)
-  ipcMain.handle(IPC.templatesDuplicate, (_e, id: string) => svc.duplicate(id))
   ipcMain.removeHandler(IPC.templatesDelete)
   ipcMain.handle(IPC.templatesDelete, (_e, id: string) => svc.remove(id))
 

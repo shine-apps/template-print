@@ -1,19 +1,39 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Space, Spin, Input, InputNumber, Select, Tooltip, Popover, message } from 'antd'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useDesignerStore } from '../store/designer-store'
-import { sessionDraft } from '../session-draft'
 import { PAPER_PRESETS } from '../../../shared/paper-presets'
 import { DesignerCanvas } from '../designer/canvas'
 import { ElementLibrary } from '../designer/element-library'
 import { LayersPanel } from '../designer/layers-panel'
 import { PropertyPanel } from '../designer/property-panel'
-import { TemplateDocumentSchema, createTemplate, localId } from '../../../print-core/template-model'
+import { TemplateDocumentSchema, createTemplate, localId, type TemplateDocument } from '../../../print-core/template-model'
+import { setNavBlocker } from '../nav-guard'
+
+/** 基于源模板构建一份内存草稿副本（不入库）：新临时 id、名称追加"副本"、元素重新分配 id；
+ *  图片元素暂沿用原 assetId，保存时后端会复制并重新分配。 */
+function buildDuplicateDraft(src: TemplateDocument): TemplateDocument {
+  const now = Date.now()
+  const cloned = structuredClone(src)
+  return TemplateDocumentSchema.parse({
+    ...cloned,
+    id: localId('tpl_new'),
+    name: `${src.name}副本`,
+    isBuiltin: false,
+    createdAt: now,
+    updatedAt: now,
+    content: {
+      ...cloned.content,
+      elements: cloned.content.elements.map((el) => ({ ...el, id: localId('el') }))
+    }
+  })
+}
 
 export function DesignerPage(): JSX.Element {
   const { id } = useParams()
   const nav = useNavigate()
+  const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(true)
   // 保存/保存并去打印进行中（同时防止新模板重复创建）
   const [saving, setSaving] = useState(false)
@@ -26,22 +46,24 @@ export function DesignerPage(): JSX.Element {
   const markSaved = useDesignerStore((s) => s.markSaved)
 
   // 已完成首次载入的路由 id。dev StrictMode 会把挂载 effect 重放一次（ref 保留），
-  // 同 id 的重放直接跳过，避免 returnToPrint 在第一次执行时被复位后，
-  // 第二次重放落入“新建模板”分支；真正的 id 变化（新建后 replace 进入）不受影响
+  // 同 id 的重放直接跳过；真正的 id 变化（新建后 replace 进入）不受影响
   const handledRef = useRef<{ id: string | undefined } | null>(null)
 
   useEffect(() => {
     void (async () => {
       if (handledRef.current && handledRef.current.id === id) return
       handledRef.current = { id }
-      // console.debug('DesignerPage', id, sessionDraft)
-      if (sessionDraft.doc && sessionDraft.returnToPrint) {
-        load(sessionDraft.doc, 'print-session')
-        sessionDraft.returnToPrint = false
-      } else if (id) {
+      if (id) {
         const got = await api.templates.get(id)
         if (!got) { message.error('模板不存在'); nav('/templates'); return }
-        load(got, 'template')
+        if (searchParams.get('duplicate')) {
+          // 从列表页/其他入口带 ?duplicate=1 进入：加载原模板后立即构建内存草稿，不入库
+          load(buildDuplicateDraft(got), 'new-template')
+          useDesignerStore.setState({ dirty: true })
+          // 保留 ?duplicate=1 参数：刷新时可重建草稿，避免误加载原模板
+        } else {
+          load(got, 'template')
+        }
       } else {
         // 无 id：直接载入未持久化的 A4 空白模板（内存临时态），首次保存时才在库中创建
         const draft = createTemplate(localId('tpl_new'), '未命名模板', { widthMm: 210, heightMm: 297 })
@@ -49,7 +71,6 @@ export function DesignerPage(): JSX.Element {
       }
       setLoading(false)
     })()
-    // 不做卸载清理：工作副本由 print 页消费或由 clearDraft() 显式清理
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -69,6 +90,24 @@ export function DesignerPage(): JSX.Element {
   // 新模板（未持久化）即使未做修改也允许保存/去打印；已存模板要求有修改
   const canSaveAndPrint = (dirty || mode === 'new-template') && !saveIssue
   const isNew = mode === 'new-template'
+
+  // 未保存修改导航守卫：供侧边栏菜单点击与窗口关闭前询问用户
+  useEffect(() => {
+    setNavBlocker(() => dirty)
+    return () => setNavBlocker(null)
+  }, [dirty])
+
+  // 关闭/刷新窗口前提示未保存修改
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (dirty) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [dirty])
 
   /**
    * 保存当前模板；成功返回模板 id，失败弹错误提示并返回 null（调用方不得继续跳转）。
@@ -91,10 +130,12 @@ export function DesignerPage(): JSX.Element {
         })
         target = { ...target, id: created.id, createdAt: created.createdAt, updatedAt: created.updatedAt }
       }
-      await api.templates.save(target)
+      // save 可能因复制外来源资产而更新图片元素的 assetId，用返回值同步 store
+      const saved = await api.templates.save(target)
+      useDesignerStore.setState({ doc: saved })
       markSaved()
       message.success('已保存')
-      return target.id
+      return saved.id
     } catch (e) {
       message.error('保存失败：' + (e instanceof Error ? e.message : String(e)))
       return null
@@ -117,6 +158,18 @@ export function DesignerPage(): JSX.Element {
   /** 已存模板且无修改：直接去打印（不执行保存） */
   function goToPrint(): void {
     nav(`/print/${doc.id}`)
+  }
+  /**
+   * 复制当前模板为内存草稿（不入库）：
+   * - 新临时 id、名称追加"副本"、元素重新分配 id；
+   * - 图片元素暂沿用原 assetId（保存时后端会复制并重新分配）；
+   * - 以 new-template 模式载入，等用户点击保存后才真正入库。
+   */
+  async function duplicateTemplate(): Promise<void> {
+    load(buildDuplicateDraft(doc), 'new-template')
+    // 草稿未入库，标记为未保存（不进撤销栈）
+    useDesignerStore.setState({ dirty: true })
+    message.success('已复制为草稿，记得保存')
   }
 
   /**
@@ -173,12 +226,6 @@ export function DesignerPage(): JSX.Element {
       </span>
     </Space>
   )
-  function backToPrint(): void {
-    // 放入改过的工作副本；paramValues / baselineJson 保持 print 页进入时的内容
-    sessionDraft.doc = doc
-    sessionDraft.returnToPrint = true
-    nav('/print')
-  }
 
   if (loading) return <Spin style={{ display: 'block', marginTop: 80 }} />
 
@@ -229,27 +276,25 @@ export function DesignerPage(): JSX.Element {
             <Button onClick={() => { useDesignerStore.getState().undo() }}>撤销</Button>
             <Button onClick={() => { useDesignerStore.getState().redo() }}>重做</Button>
             {dirty && <span style={{ color: '#fa8c16' }}>未保存</span>}
-            {mode === 'print-session'
-              ? <Button type="primary" onClick={backToPrint}>完成，返回打印</Button>
-              : (dirty || isNew)
-                ? (
-                  <>
-                    <Button type="primary" loading={saving} onClick={saveAndStay}>保存模板</Button>
-                    <Tooltip title={canSaveAndPrint ? '' : (saveIssue ?? '模板校验未通过')}>
-                      <span style={{ display: 'inline-block' }}>
-                        <Button onClick={saveAndPrint} loading={saving} disabled={!canSaveAndPrint}>
-                          保存并去打印
-                        </Button>
-                      </span>
-                    </Tooltip>
-                  </>
-                )
-                : (
-                  <>
-                    <Button type="primary" onClick={saveAndStay}>保存模板</Button>
-                    <Button onClick={goToPrint}>去打印</Button>
-                  </>
-                )}
+            {(dirty || isNew) ? (
+              <>
+                <Button type="primary" loading={saving} onClick={saveAndStay}>保存模板</Button>
+                <Tooltip title={canSaveAndPrint ? '' : (saveIssue ?? '模板校验未通过')}>
+                  <span style={{ display: 'inline-block' }}>
+                    <Button onClick={saveAndPrint} loading={saving} disabled={!canSaveAndPrint}>
+                      保存并去打印
+                    </Button>
+                  </span>
+                </Tooltip>
+                {!isNew && <Button onClick={duplicateTemplate}>复制模板</Button>}
+              </>
+            ) : (
+              <>
+                <Button type="primary" onClick={saveAndStay}>保存模板</Button>
+                <Button onClick={goToPrint}>去打印</Button>
+                <Button onClick={duplicateTemplate}>复制模板</Button>
+              </>
+            )}
           </Space>
         </div>
         <div style={{ flex: 1 }}><DesignerCanvas /></div>

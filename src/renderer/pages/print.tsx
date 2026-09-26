@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Spin, Switch, message } from 'antd'
+import { Button, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Select, Slider, Space, Spin, Switch, message } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
-import { clearDraft, sessionDraft } from '../session-draft'
+import { clearDraft, paramValuesCache, sessionDraft } from '../session-draft'
 import { renderPrintDocument } from '../../../print-core/render-print-document'
 import { evaluateParams, type EvaluatedValues } from '../../../print-core/param-evaluator'
 import { mmToPxAt96 } from '../../../shared/units'
@@ -35,9 +35,8 @@ export function PrintPage(): JSX.Element {
   // 已完成首次载入的路由 id。dev StrictMode 会把挂载 effect 重放一次，
   // 第一次执行已 clearDraft()，重放会误判“模板不存在”并跳回模板页，故同 id 仅执行一次
   const handledRef = useRef<{ id: string | undefined } | null>(null)
-  const wrapRef = useRef<HTMLDivElement>(null)
   const paperHintResolve = useRef<((v: boolean) => void) | null>(null)
-  const [box, setBox] = useState({ w: 0, h: 0 })
+  const [scale, setScale] = useState(1)
 
   useEffect(() => { void api.settings.get().then((s) => setConfirmedPaperHints(s.paperHintsConfirmed)) }, [])
 
@@ -51,7 +50,7 @@ export function PrintPage(): JSX.Element {
       let baseline: string | null = null
 
       if (sessionDraft.doc) {
-        // 从设计器“完成返回”或历史“重打”进入
+        // 从历史“重打”进入：用历史快照
         loaded = sessionDraft.doc
         restoredValues = sessionDraft.paramValues
         historyFlag = sessionDraft.fromHistory
@@ -59,6 +58,10 @@ export function PrintPage(): JSX.Element {
         clearDraft()
       } else if (id) {
         loaded = await api.templates.get(id)
+        // 从设计器“调整版式”返回时，恢复用户已填的参数值（doc 走数据库）
+        restoredValues = paramValuesCache.get(id) ?? null
+        // 一次性消费：取出后即删除，避免下次进入时残留旧值
+        paramValuesCache.delete(id)
       } else {
         // 从左侧菜单直接进入：未指定模板，引导回模板列表选择
         message.info('请先从模板列表选择要打印的模板')
@@ -88,35 +91,23 @@ export function PrintPage(): JSX.Element {
     })()
   }, [id, nav])
 
-  // 预览区域尺寸
-  useEffect(() => {
-    const el = wrapRef.current
-    if (!el) return
-    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth - 32, h: el.clientHeight - 60 }))
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [doc])
-
   const evaluated = useMemo<EvaluatedValues>(
     () => (doc ? evaluateParams(doc.params, values) : {}),
     [doc, values]
   )
+  // 预览始终显示全部元素（图片/图形），便于查看完整版式；
+  // 实际打印由 print-service 根据 textOnly 过滤非文本元素
   const previewHtml = useMemo(
-    () => (doc ? renderPrintDocument({ ...doc, textOnly }, evaluated, assetUrls) : ''),
-    [doc, textOnly, evaluated, assetUrls]
+    () => (doc ? renderPrintDocument({ ...doc, textOnly: false }, evaluated, assetUrls) : ''),
+    [doc, evaluated, assetUrls]
   )
-
-  // 预览 iframe：按 96dpi 得到物理像素，再缩放到可用区域
-  const preview = useMemo(() => {
-    if (!doc || box.w < 10 || box.h < 10) return null
-    const naturalW = mmToPxAt96(doc.paper.widthMm)
-    const naturalH = mmToPxAt96(doc.paper.heightMm)
-    const scale = Math.min(box.w / naturalW, box.h / naturalH, 1.5)
-    return { w: naturalW * scale, h: naturalH * scale, scale }
-  }, [doc, box])
 
   if (!doc) return <Spin style={{ display: 'block', marginTop: 80 }} />
   const errors = evaluated.__errors ?? []
+
+  // 预览 iframe：按 96dpi 得到物理像素，再按用户调节的缩放比缩放
+  const naturalW = mmToPxAt96(doc.paper.widthMm)
+  const naturalH = mmToPxAt96(doc.paper.heightMm)
 
   function setValue(key: string, v: unknown): void {
     setValues((prev) => ({ ...prev, [key]: v === null || v === undefined ? '' : String(v) }))
@@ -131,7 +122,8 @@ export function PrintPage(): JSX.Element {
       return (
         <DatePicker
           style={{ width: '100%' }}
-          format={p.dateFormat.replace(/yyyy/g, 'YYYY').replace(/dd/g, 'DD')}
+          format={p.dateFormat.replace(/yyyy|dd|d/g, (t) =>
+            t === 'yyyy' ? 'YYYY' : t === 'dd' ? 'DD' : 'D')}
           value={v ? dayjs(v) : null}
           onChange={(d: Dayjs | null) => setValue(p.name, d ? d.format('YYYY-MM-DD') : '')}
         />
@@ -151,13 +143,9 @@ export function PrintPage(): JSX.Element {
 
   function editLayout(): void {
     if (!doc) return
-    // 携带打印侧开关的工作副本，避免往返设计器后选择丢失
-    sessionDraft.doc = { ...doc, printMode: mode, printerName, textOnly }
-    sessionDraft.paramValues = values
-    sessionDraft.returnToPrint = true
-    sessionDraft.fromHistory = false
-    sessionDraft.baselineJson = baselineRef.current
-    nav('/designer')
+    // 缓存当前参数值，设计器返回时恢复（doc 始终从数据库重新加载）
+    paramValuesCache.set(doc.id, values)
+    nav(`/designer/${doc.id}`)
   }
 
   async function doPrint(): Promise<void> {
@@ -251,7 +239,7 @@ export function PrintPage(): JSX.Element {
     if (!lastResult) return
     const w = lastResult.working
     const created = await api.templates.create({
-      name: `${w.name} 副本`,
+      name: `${w.name}副本`,
       widthMm: w.paper.widthMm,
       heightMm: w.paper.heightMm
     })
@@ -300,8 +288,8 @@ export function PrintPage(): JSX.Element {
             <span>仅打印文本</span>
             <Switch checked={textOnly} onChange={setTextOnly} />
           </Space>
-          <div style={{ color: '#999', fontSize: 12, lineHeight: 1.4 }}>
-            仅输出文字，不打印图片/图形/边框，适合已预印底图的纸张
+          <div style={{ color: '#d46b08', fontSize: '0.8rem', background: '#fff7e6',  padding: '4px' }}>
+            选中后仅输出文字，不打印图片/图形/边框，适合已预印底图的纸张
           </div>
           <Space>
             <Button type="primary" onClick={doPrint}>打印</Button>
@@ -310,9 +298,19 @@ export function PrintPage(): JSX.Element {
         </Space>
       </div>
 
-      <div ref={wrapRef} style={{ flex: 1, overflow: 'hidden', background: '#e9ecef', padding: 16, textAlign: 'center' }}>
-        <div style={{ color: '#666', marginBottom: 8 }}>实时预览（{doc.paper.widthMm}×{doc.paper.heightMm}mm）</div>
-        {preview && (
+      <div style={{ flex: 1, overflow: 'auto', background: '#e9ecef', padding: 16 }}>
+        <div style={{ color: '#666', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+          <span>实时预览（{doc.paper.widthMm}×{doc.paper.heightMm}mm）</span>
+          <span style={{ marginLeft: 8, color: '#666', whiteSpace: 'nowrap' }}>缩放</span>
+          <button onClick={() => setScale((s) => Math.max(0.2, +(s - 0.01).toFixed(2)))}>－</button>
+          <Slider
+            style={{ width: 200, margin: 0 }}
+            min={0.2} max={3} step={0.01} value={scale} onChange={setScale}
+            tooltip={{ formatter: (v) => `${Math.round((v ?? 0) * 100)}%` }} />
+          <button onClick={() => setScale((s) => Math.min(3, +(s + 0.01).toFixed(2)))}>＋</button>
+          <span style={{ color: '#666', minWidth: 42 }}>{Math.round(scale * 100)}%</span>
+        </div>
+        <div style={{ width: naturalW * scale, height: naturalH * scale, margin: '0 auto' }}>
           <iframe
             title="preview"
             srcDoc={previewHtml}
@@ -321,13 +319,13 @@ export function PrintPage(): JSX.Element {
               border: 'none',
               background: '#fff',
               boxShadow: '0 2px 8px rgba(0,0,0,.2)',
-              width: mmToPxAt96(doc.paper.widthMm),
-              height: mmToPxAt96(doc.paper.heightMm),
-              transform: `scale(${preview.scale})`,
-              transformOrigin: 'top center'
+              width: naturalW,
+              height: naturalH,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left'
             }}
           />
-        )}
+        </div>
       </div>
 
       <Modal

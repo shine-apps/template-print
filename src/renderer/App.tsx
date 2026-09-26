@@ -8,6 +8,7 @@ import { HistoryPage } from './pages/history'
 import { SettingsPage } from './pages/settings'
 import { AboutPage } from './pages/about'
 import { UpdateModal } from './update/update-modal'
+import { confirmLeave } from './nav-guard'
 
 const { Sider, Content } = Layout
 
@@ -29,7 +30,7 @@ function Shell(): JSX.Element {
             theme="dark"
             mode="inline"
             selectedKeys={[selected]}
-            onClick={(e) => nav(e.key)}
+            onClick={(e) => { if (confirmLeave()) nav(e.key) }}
             items={[
               { key: '/templates', label: '模板列表' },
               { key: '/designer', label: '模板设计' },

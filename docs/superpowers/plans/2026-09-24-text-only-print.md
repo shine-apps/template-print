@@ -508,7 +508,7 @@ git commit -m "fix(print): 仅打印文本时跳过图片资产存在性校验"
             <span>仅打印文本</span>
             <Switch checked={textOnly} onChange={setTextOnly} />
           </Space>
-          <div style={{ color: '#999', fontSize: 12, lineHeight: 1.4 }}>
+          <div style={{ color: '#999', fontSize: 12, lineHeight: 1.4 }} >
             仅输出文字，不打印图片/图形/边框，适合已预印底图的纸张
           </div>
 ```

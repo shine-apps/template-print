@@ -85,8 +85,10 @@ function renderTextHtml(
       `<div style="writing-mode:vertical-rl;text-orientation:mixed;height:100%;${fontCss(p)};` +
       `color:${p.color};line-height:${p.lineHeight};white-space:pre-wrap;word-break:break-word;overflow:hidden;${deco}">${body}</div></div>`
   }
-  // height:100% 把文本约束在元素框内，超出部分由 overflow:hidden 裁剪（与画布 LaidText 裁剪一致）
-  return `<div style="height:100%;${fontCss(p)};color:${p.color};line-height:${p.lineHeight};` +
+  // height:100% 把文本约束在元素框内，flex + align-items:safe center 实现垂直居中；
+  // safe 关键字：内容溢出时自动退化为 flex-start（从顶部开始），避免首行被裁掉；
+  // 超出部分由 overflow:hidden 裁剪（与画布 LaidText 裁剪一致）
+  return `<div style="display:flex;align-items:safe center;height:100%;${fontCss(p)};color:${p.color};line-height:${p.lineHeight};` +
     `text-align:${p.align};white-space:pre-wrap;word-break:break-word;overflow:hidden;${deco}">${body}</div>`
 }
 
@@ -120,7 +122,8 @@ export function renderPrintDocument(
   assetUrls: RenderOptions
 ): string {
   const { widthMm, heightMm } = doc.paper
-  // textOnly（预印纸套打）：图片/图形/边框节点不生成，预览/实打印/缩略图共用此输出
+  // textOnly（预印纸套打）：图片/图形/边框节点不生成；
+  // 实打印/缩略图走此过滤，渲染端预览固定传 textOnly:false 以显示完整版式
   const visibleElements = doc.textOnly
     ? doc.content.elements.filter((el) => el.type === 'text')
     : doc.content.elements

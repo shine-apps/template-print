@@ -129,10 +129,45 @@ export class AssetService {
     return out
   }
 
+  /** 按资产 id 列表取 dataUrl（供未保存草稿引用其他模板资产时显示图片用） */
+  async listDataUrlsByIds(ids: string[]): Promise<Record<string, string>> {
+    const out: Record<string, string> = {}
+    for (const id of ids) {
+      const rec = this.repo.get(id)
+      if (rec) out[id] = await this.toDataUrl(id)
+    }
+    return out
+  }
+
   purgeForTemplate(templateId: string): void {
     for (const rec of this.repo.removeByTemplate(templateId)) {
       rmSync(join(this.dataDir, rec.filePath), { force: true })
     }
+  }
+
+  /**
+   * 复制资产到目标模板：生成新 assetId，复制文件，插入新记录。
+   * 用于模板复制时保留图片元素。
+   */
+  copyAsset(sourceAssetId: string, newTemplateId: string): string {
+    const src = this.repo.get(sourceAssetId)
+    if (!src) throw new Error(`资产不存在: ${sourceAssetId}`)
+    const newAssetId = `ast_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+    const ext = extname(src.filePath)
+    const relPath = join('assets', newTemplateId, `${newAssetId}${ext}`)
+    mkdirSync(join(this.dataDir, 'assets', newTemplateId), { recursive: true })
+    copyFileSync(join(this.dataDir, src.filePath), join(this.dataDir, relPath))
+    this.repo.insert({
+      id: newAssetId,
+      templateId: newTemplateId,
+      filePath: relPath,
+      originalName: src.originalName,
+      mime: src.mime,
+      sizeBytes: src.sizeBytes,
+      widthPx: src.widthPx,
+      heightPx: src.heightPx
+    })
+    return newAssetId
   }
 }
 
@@ -146,4 +181,6 @@ export function registerAssetHandlers(deps: Services): void {
   ipcMain.handle(IPC.assetsDataUrl, (_e, id: string) => svc.toDataUrl(id))
   ipcMain.removeHandler(IPC.assetsListUrls)
   ipcMain.handle(IPC.assetsListUrls, (_e, templateId: string) => svc.listDataUrls(templateId))
+  ipcMain.removeHandler(IPC.assetsListUrlsByIds)
+  ipcMain.handle(IPC.assetsListUrlsByIds, (_e, ids: string[]) => svc.listDataUrlsByIds(ids))
 }

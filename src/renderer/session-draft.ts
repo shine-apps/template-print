@@ -28,3 +28,10 @@ export function clearDraft(): void {
   sessionDraft.fromHistory = false
   sessionDraft.baselineJson = null
 }
+
+/**
+ * 打印页参数值缓存（按模板 id）。
+ * 从打印页“调整版式”跳设计器前存入，返回打印页时取出，避免用户已填参数丢失。
+ * doc 始终从数据库重新加载，仅参数值走此缓存。
+ */
+export const paramValuesCache = new Map<string, Record<string, string>>()

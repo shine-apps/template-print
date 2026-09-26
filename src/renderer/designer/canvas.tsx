@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Slider } from 'antd'
 import { Stage, Layer, Rect, Image as KImage, Line, Ellipse, Group, Transformer } from 'react-konva'
 import type Konva from 'konva'
 import { mmToPxAt96 } from '../../../shared/units'
@@ -60,6 +61,19 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls, onDr
     onTap: onSelect,
     onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => onDragMove(el, e.target),
     onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => onDragEnd(el, e.target),
+    onTransform: () => {
+      // 图片缩放时锁定原始宽高比：以宽度驱动，高度按比例推算
+      if (el.type === 'image' && imageEl?.naturalWidth) {
+        const node = shapeRef.current
+        const box = (node as Konva.Container | null)?.findOne('Rect')
+        if (node && box) {
+          const ratio = imageEl.naturalWidth / imageEl.naturalHeight
+          const w = box.width() * node.scaleX()
+          node.scaleY(w / box.height() / ratio)
+          node.getLayer()?.batchDraw()
+        }
+      }
+    },
     onTransformEnd: () => {
       const node = shapeRef.current
       if (!node) return
@@ -67,10 +81,21 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls, onDr
         x: node.x() / mmToPxAt96(1) / scale,
         y: node.y() / mmToPxAt96(1) / scale
       }
-      // Group 包装元素（直线/椭圆）只回传坐标，尺寸不回传
-      if (node.className !== 'Group') {
-        patch.w = Math.max(1, node.width() * node.scaleX() / mmToPxAt96(1) / scale)
-        patch.h = Math.max(1, node.height() * node.scaleY() / mmToPxAt96(1) / scale)
+      // 图片与矩形需回传尺寸；直线/椭圆（Group 包装）只回传坐标
+      const needSize = el.type !== 'shape' || el.props.shape === 'rect'
+      if (needSize) {
+        let w: number, h: number
+        if (node.className === 'Group') {
+          // 图片 Group：从子透明 Rect 取元素框尺寸
+          const box = (node as Konva.Container).findOne('Rect')
+          w = box ? box.width() * node.scaleX() : 0
+          h = box ? box.height() * node.scaleY() : 0
+        } else {
+          w = node.width() * node.scaleX()
+          h = node.height() * node.scaleY()
+        }
+        patch.w = Math.max(1, w / mmToPxAt96(1) / scale)
+        patch.h = Math.max(1, h / mmToPxAt96(1) / scale)
       }
       patch.rotation = Math.round(node.rotation() * 10) / 10
       onChange(patch)
@@ -112,9 +137,30 @@ function ElementShape({ el, scale, selected, onSelect, onChange, assetUrls, onDr
         stroke={el.props.strokeColor} strokeWidth={stk} fill={el.props.fillColor ?? undefined} />
     }
   } else if (el.type === 'image') {
-    // M1 统一 contain：KImage 直接拉伸到元素框；无 crop 计算（fit 切换放 M2）
+    // 画布按 contain 渲染：保持图片原始比例、居中、不拉伸，与打印侧 object-fit:contain 一致
+    const boxW = MM(el.w, scale)
+    const boxH = MM(el.h, scale)
+    let imgW = boxW, imgH = boxH, offX = 0, offY = 0
+    if (imageEl && imageEl.naturalWidth > 0) {
+      const imgRatio = imageEl.naturalWidth / imageEl.naturalHeight
+      const boxRatio = boxW / boxH
+      if (imgRatio > boxRatio) {
+        imgW = boxW; imgH = boxW / imgRatio
+        offY = (boxH - imgH) / 2
+      } else {
+        imgH = boxH; imgW = boxH * imgRatio
+        offX = (boxW - imgW) / 2
+      }
+    }
+    // Group 作为 shapeRef 接收拖动/Transformer；透明 Rect 定义元素框并接收指针事件
+    // （fill=transparent 在 Konva 中仍有 hit area）；KImage 按 contain 居中显示
     body = (
-      <KImage ref={shapeRef as never} {...common} image={imageEl} opacity={el.props.opacity} />
+      <Group ref={shapeRef as never} {...common}
+        clipX={0} clipY={0} clipWidth={boxW} clipHeight={boxH}>
+        <Rect width={boxW} height={boxH} fill="transparent" />
+        <KImage x={offX} y={offY} width={imgW} height={imgH} image={imageEl}
+          opacity={el.props.opacity} listening={false} />
+      </Group>
     )
   } else {
     body = <Rect ref={shapeRef as never} {...common} fill="#e6f4ff" stroke="#1677ff" dash={[6, 4]} />
@@ -145,32 +191,50 @@ export function DesignerCanvas(): JSX.Element {
   const [gridOn, setGridOn] = useState(() => localStorage.getItem('tp-grid') === '1')
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] })
   useEffect(() => { localStorage.setItem('tp-grid', gridOn ? '1' : '0') }, [gridOn])
-  const imageCount = doc.content.elements.filter((e) => e.type === 'image').length
+  const imageEls = doc.content.elements.filter((e) => e.type === 'image')
+  const imageAssetIds = imageEls.map((e) => (e as Extract<typeof e, { type: 'image' }>).props.assetId)
   useEffect(() => {
-    void window.api.assets.listUrls(doc.id).then(setAssetUrls).catch(() => setAssetUrls({}))
-  }, [doc.id, imageCount])
+    if (imageAssetIds.length === 0) { setAssetUrls({}); return }
+    void window.api.assets.listUrlsByIds(imageAssetIds).then(setAssetUrls).catch(() => setAssetUrls({}))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageAssetIds.join(',')])
 
   const pw = MM(doc.paper.widthMm, scale)
   const ph = MM(doc.paper.heightMm, scale)
   const sorted = [...doc.content.elements].sort((a, b) => a.zIndex - b.zIndex)
 
-  const gridLines: JSX.Element[] = []
-  if (gridOn) {
-    for (let i = 0; i < Math.max(0, Math.floor(doc.paper.widthMm / 10) - 1); i++) {
-      const gx = MM((i + 1) * 10, scale)
-      gridLines.push(
+  // 背景层（纸张+网格+边框）引用，用于缓存：网格线可能上万条，
+  // 缓存后拖拽/变换元素时只需 blit 位图，不再逐线重绘。
+  const bgLayerRef = useRef<Konva.Layer>(null)
+
+  const gridLines = useMemo(() => {
+    if (!gridOn) return null
+    const lines: JSX.Element[] = []
+    for (let i = 0; i < Math.max(0, Math.floor(doc.paper.widthMm / 2) - 1); i++) {
+      const gx = MM((i + 1) * 2, scale)
+      lines.push(
         <Line key={`gv${i}`} listening={false}
           points={[gx, 0, gx, ph]} stroke="#d9d9d9" strokeWidth={1} />
       )
     }
-    for (let i = 0; i < Math.max(0, Math.floor(doc.paper.heightMm / 10) - 1); i++) {
-      const gy = MM((i + 1) * 10, scale)
-      gridLines.push(
+    for (let i = 0; i < Math.max(0, Math.floor(doc.paper.heightMm / 2) - 1); i++) {
+      const gy = MM((i + 1) * 2, scale)
+      lines.push(
         <Line key={`gh${i}`} listening={false}
           points={[0, gy, pw, gy]} stroke="#d9d9d9" strokeWidth={1} />
       )
     }
-  }
+    return lines
+  }, [gridOn, doc.paper.widthMm, doc.paper.heightMm, scale, pw, ph])
+
+  // 纸张/网格/边框仅在尺寸或缩放变化时重绘并缓存
+  useEffect(() => {
+    const layer = bgLayerRef.current
+    if (layer) {
+      layer.clearCache()
+      layer.cache()
+    }
+  }, [pw, ph, scale, gridOn])
 
   function handleDragMove(el: TemplateElement, node: Konva.Node): void {
     const moving: MovingRect = {
@@ -185,7 +249,7 @@ export function DesignerCanvas(): JSX.Element {
       .map((e) => ({ id: e.id, x: e.x, y: e.y, w: e.w, h: e.h }))
     const r = snapPosition(
       moving, paper, other, 3,
-      gridOn ? { enabled: true, sizeMm: 10 } : { enabled: false, sizeMm: 10 }
+      gridOn ? { enabled: true, sizeMm: 2 } : { enabled: false, sizeMm: 2 }
     )
     if (Math.abs(r.x - moving.x) > 0.001) node.x(MM(r.x, scale))
     if (Math.abs(r.y - moving.y) > 0.001) node.y(MM(r.y, scale))
@@ -208,19 +272,30 @@ export function DesignerCanvas(): JSX.Element {
         }
       }}
       style={{ outline: 'none', height: '100%', overflow: 'auto', background: '#e9ecef', padding: 24 }}>
-      <div style={{ marginBottom: 8 }}>
-        <button onClick={() => setScale((s) => Math.max(0.2, s - 0.1))}>－</button>
-        <span style={{ margin: '0 8px' }}>{Math.round(scale * 100)}%</span>
-        <button onClick={() => setScale((s) => Math.min(3, s + 0.1))}>＋</button>
-        <label style={{ marginLeft: 12 }}>
-          <input type="checkbox" checked={gridOn} onChange={(e) => setGridOn(e.target.checked)} /> 网格(10mm)
+      <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: '#666', whiteSpace: 'nowrap' }}>缩放</span>
+        <button onClick={() => setScale((s) => Math.max(0.2, +(s - 0.01).toFixed(2)))}>－</button>
+        <Slider
+          style={{ width: 300, margin: 0 }}
+          min={0.2} max={3} step={0.01} value={scale} onChange={setScale}
+          tooltip={{ formatter: (v) => `${Math.round((v ?? 0) * 100)}%` }} />
+        <button onClick={() => setScale((s) => Math.min(3, +(s + 0.01).toFixed(2)))}>＋</button>
+        <span style={{ color: '#666', minWidth: 42 }}>{Math.round(scale * 100)}%</span>
+        <label style={{ marginLeft: 8 }}>
+          <input type="checkbox" checked={gridOn} onChange={(e) => setGridOn(e.target.checked)} /> 网格(2mm)
         </label>
       </div>
       <Stage width={Math.max(pw + 80, 400)} height={Math.max(ph + 80, 400)}
         onMouseDown={(e) => { if (e.target === e.target.getStage()) select(null) }}>
-        <Layer offsetX={-40} offsetY={-40}>
+        {/* 背景层：纸张 + 边框 + 网格，缓存为位图避免大纸张网格拖拽时重绘 */}
+        <Layer ref={bgLayerRef} offsetX={-40} offsetY={-40}>
+          <Rect x={-1} y={-1} width={pw + 2} height={ph + 2}
+            stroke="#444" strokeWidth={2} fill="transparent" listening={false} />
           <Rect x={0} y={0} width={pw} height={ph} fill="#ffffff" shadowBlur={6} shadowOpacity={0.2} />
           {gridLines}
+        </Layer>
+        {/* 前景层：元素 + 吸附辅助线，随交互实时重绘 */}
+        <Layer offsetX={-40} offsetY={-40}>
           {sorted.map((el) => (
             <ElementShape key={el.id} el={el} scale={scale} selected={el.id === selectedId}
               onSelect={() => select(el.id)}

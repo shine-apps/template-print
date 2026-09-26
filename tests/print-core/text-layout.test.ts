@@ -19,8 +19,9 @@ describe('横排', () => {
     expect(r.lines).toHaveLength(2)
     expect(r.lines[0].chars.map((c) => c.ch).join('')).toBe('一二三')
     expect(r.lines[0].chars[0].x).toBe(0)
-    // 内容高 2*12=24，框高 100，垂直居中偏移 (100-24)/2=38；第二行 y=38+12=50
-    expect(r.lines[1].chars[0].y).toBe(50)
+    // 内容高 2*12=24，框高 100，居中偏移 (100-24)/2=38；半行距 (12-10)/2=1；
+    // 第二行 y=38+1+12=51（半行距补偿对齐 CSS 行盒）
+    expect(r.lines[1].chars[0].y).toBe(51)
   })
   it('ASCII 单词尽量整词移动，超框强制断字', () => {
     const word = layoutText('ab cd', 100, 100, style(), m) // 单词 10mm

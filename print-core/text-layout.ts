@@ -104,11 +104,15 @@ export function layoutText(
   if (!vertical) {
     const contentH = round2(rawLines.length * pitch)
     const offsetY = round2(Math.max(0, (boxH - contentH) / 2))
+    // 半行距补偿：CSS line-height>1 时差值对半拆为每行上下的 half-leading，
+    // 字形 em-box 顶部位于半行距处；画布 textBaseline:'top' 需补上同一偏移，
+    // 否则打印预览（CSS 行盒）的文字会比画布系统性偏下 (pitch-fs)/2。
+    const halfLeading = round2((pitch - fs) / 2)
     rawLines.forEach((ln, i) => {
       let startX = 0
       if (st.align === 'center') startX = round2((boxW - ln.cross) / 2)
       else if (st.align === 'right') startX = round2(boxW - ln.cross)
-      const y = round2(offsetY + i * pitch)
+      const y = round2(offsetY + halfLeading + i * pitch)
       let cx = startX
       const chars: LaidChar[] = ln.cells.map((c) => {
         const lc = { ch: c.ch, x: round2(cx), y, rotated: false }

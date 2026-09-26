@@ -76,8 +76,7 @@ export function LaidText({ el, scale, shapeRef, commonProps, onEdit }: LaidTextP
         const fsPx = mmToPxAt96(el.props.fontSizeMm) * scale
         ctx.save()
         ctx.beginPath()
-        // 裁剪框留 2px 边距，避免下伸笔画（g/p/y/q/j）被裁掉
-        ctx.rect(-2, -2, wPx + 4, hPx + 4)
+        ctx.rect(0, 0, wPx, hPx)
         ctx.clip()
         ctx.font = `${el.props.italic ? 'italic ' : ''}${el.props.bold ? 'bold ' : ''}${fsPx}px ${family}`
         ctx.fillStyle = el.props.color

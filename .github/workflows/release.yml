@@ -61,8 +61,8 @@ jobs:
       - name: Build (electron-vite)
         run: npx electron-vite build
 
-      - name: Package NSIS installer
-        run: npx electron-builder --win nsis --publish never
+      - name: Package NSIS + MSI installers
+        run: npx electron-builder --win --publish never
 
       - name: Extract release notes for this version
         run: node scripts/release/prepare-notes.mjs $env:VERSION
@@ -79,5 +79,6 @@ jobs:
           body_path: release/release-notes.txt
           files: |
             release/*Setup*x64.exe
+            release/*Setup*x64.msi
             release/latest.json
           fail_on_unmatched_files: true

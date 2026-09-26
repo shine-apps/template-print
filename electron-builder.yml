@@ -23,6 +23,11 @@ win:
   target:
     - target: nsis
       arch: [x64]
+    - target: msi
+      arch: [x64]
+msi:
+  # 每用户安装（免管理员权限），与 NSIS 默认行为一致
+  perMachine: false
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

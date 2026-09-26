@@ -3,6 +3,7 @@
   "version": "0.2.2",
   "private": true,
   "description": "可视化模板设计与打印桌面程序",
+  "author": "上海祥和一文化科技有限公司",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "powershell -ExecutionPolicy Bypass -File ./scripts/dev.ps1",

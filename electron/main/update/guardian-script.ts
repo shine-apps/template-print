@@ -1,6 +1,6 @@
 /** 守护脚本参数（主进程写 guardian-params.json，UTF-8；路径可含非 ASCII） */
 export interface GuardianParams {
-  /** 已下载校验通过的 NSIS 安装包绝对路径 */
+  /** 已下载校验通过的安装包绝对路径（支持 .exe NSIS 或 .msi） */
   setupPath: string
   /** 当前应用 exe 绝对路径（其目录即安装目录/备份源） */
   exePath: string
@@ -15,7 +15,8 @@ export interface GuardianParams {
 /**
  * 生成纯 ASCII 的 PowerShell 5.1 守护脚本。
  * 流程：等应用退出 → 必要时自我提权（UAC 一次）→ robocopy 备份安装目录
- *      → NSIS /S 静默安装 → 校验新版本 → 成功启动新版；失败 robocopy /MIR 回滚并启动旧版。
+ *      → 静默安装（NSIS /S 或 msiexec /qn）→ 校验新版本 → 成功启动新版；
+ *      失败 robocopy /MIR 回滚并启动旧版。
  * 所有路径运行时从同目录 guardian-params.json 读取，脚本内不硬编码任何路径。
  */
 export function buildGuardianScript(): string {
@@ -116,14 +117,24 @@ try {
   if ($LASTEXITCODE -gt 7) { Fail-Guardian 'backup-failed' }
   Write-Log ('backup exit ' + $LASTEXITCODE)
 
-  # 4) Silent NSIS install - explicitly target the current install directory.
-  #    Without /D, the installer may use its default dir or fail to resolve the
-  #    previous path (especially after self-elevation changes the registry hive),
-  #    leaving the old exe untouched and verify-failed -> rollback.
-  #    NSIS rule: /D must be the LAST argument and the path must NOT be quoted.
-  $p = Start-Process -FilePath $params.setupPath -ArgumentList "/S /D=$installDir" -Wait -PassThru
-  Write-Log ('installer exit ' + $p.ExitCode)
-  if ($p.ExitCode -ne 0) { Fail-Guardian 'installer-failed' }
+  # 4) Silent install - explicitly target the current install directory.
+  #    NSIS (.exe): /S + /D=<dir> (NSIS rule: /D must be LAST arg, path NOT quoted).
+  #    MSI  (.msi): msiexec /i <pkg> INSTALLDIR="<dir>" /qn /norestart
+  #                 exit 0 = OK, 3010 = OK restart-required.
+  #    Without an explicit target dir the installer may use its default location
+  #    (especially after self-elevation changes the registry hive), leaving the
+  #    old exe untouched -> verify-failed -> rollback.
+  $ext = [System.IO.Path]::GetExtension($params.setupPath).ToLowerInvariant()
+  if ($ext -eq '.msi') {
+    $msiArgs = '/i "' + $params.setupPath + '" INSTALLDIR="' + $installDir + '" /qn /norestart'
+    $p = Start-Process -FilePath 'msiexec.exe' -ArgumentList $msiArgs -Wait -PassThru
+    Write-Log ('installer exit ' + $p.ExitCode)
+    if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { Fail-Guardian 'installer-failed' }
+  } else {
+    $p = Start-Process -FilePath $params.setupPath -ArgumentList "/S /D=$installDir" -Wait -PassThru
+    Write-Log ('installer exit ' + $p.ExitCode)
+    if ($p.ExitCode -ne 0) { Fail-Guardian 'installer-failed' }
+  }
 
   # 5) Verify new version
   if (-not (Test-Path $params.exePath)) { Fail-Guardian 'verify-failed' }

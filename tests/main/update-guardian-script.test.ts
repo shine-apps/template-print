@@ -12,7 +12,12 @@ describe('buildGuardianScript', () => {
     for (const marker of [
       "Get-Content (Join-Path $scriptDir 'guardian-params.json') -Encoding UTF8 -Raw",
       'robocopy',
+      // NSIS 分支
       "-ArgumentList \"/S /D=$installDir\" -Wait -PassThru",
+      // MSI 分支
+      "msiexec.exe",
+      'INSTALLDIR="',
+      '3010',
       "Write-GuardianState 'done'",
       "Write-GuardianState 'failed'",
       '-Verb RunAs',

@@ -14,7 +14,9 @@ out/
 # 本地数据库与资源
 *.db
 *.db-journal
-assets/
+# 仅忽略项目根目录的 assets/（运行时用户数据在 %APPDATA%，不会出现在仓库），
+# 但 src/renderer/assets/ 等源码内资源目录需要纳入版本控制
+/assets/
 thumbs/
 
 # 环境与日志

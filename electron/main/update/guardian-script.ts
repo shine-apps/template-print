@@ -116,8 +116,12 @@ try {
   if ($LASTEXITCODE -gt 7) { Fail-Guardian 'backup-failed' }
   Write-Log ('backup exit ' + $LASTEXITCODE)
 
-  # 4) Silent NSIS install
-  $p = Start-Process -FilePath $params.setupPath -ArgumentList '/S' -Wait -PassThru
+  # 4) Silent NSIS install - explicitly target the current install directory.
+  #    Without /D, the installer may use its default dir or fail to resolve the
+  #    previous path (especially after self-elevation changes the registry hive),
+  #    leaving the old exe untouched and verify-failed -> rollback.
+  #    NSIS rule: /D must be the LAST argument and the path must NOT be quoted.
+  $p = Start-Process -FilePath $params.setupPath -ArgumentList "/S /D=$installDir" -Wait -PassThru
   Write-Log ('installer exit ' + $p.ExitCode)
   if ($p.ExitCode -ne 0) { Fail-Guardian 'installer-failed' }
 

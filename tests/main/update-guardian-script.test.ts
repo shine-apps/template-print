@@ -12,7 +12,7 @@ describe('buildGuardianScript', () => {
     for (const marker of [
       "Get-Content (Join-Path $scriptDir 'guardian-params.json') -Encoding UTF8 -Raw",
       'robocopy',
-      "-ArgumentList '/S' -Wait -PassThru",
+      "-ArgumentList \"/S /D=$installDir\" -Wait -PassThru",
       "Write-GuardianState 'done'",
       "Write-GuardianState 'failed'",
       '-Verb RunAs',

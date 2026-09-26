@@ -3,6 +3,7 @@ import { Button, Card, Space, Switch, Tag, Typography, message } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import { APP_NAME, APP_VERSION } from '../../../shared/app-info'
 import type { AppSettingsDto } from '../../../shared/settings-dto'
+import logoUrl from '../assets/logo.png'
 
 const { Paragraph, Text } = Typography
 
@@ -33,6 +34,7 @@ export function AboutPage(): JSX.Element {
       <Card>
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
           <Space size={12} align="center">
+            <img src={logoUrl} alt={APP_NAME} style={{ width: 128, height: 128, borderRadius: 12 }} />
             <strong style={{ fontSize: 20 }}>{APP_NAME}</strong>
             <Tag color="blue">v{APP_VERSION}</Tag>
           </Space>

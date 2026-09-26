@@ -5,6 +5,7 @@ import {
 import { MoreOutlined, PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import { TemplateThumbnail } from '../components/template-thumbnail'
 import type { TemplateDocument } from '../../../print-core/template-model'
 
 export function TemplatesPage(): JSX.Element {
@@ -58,19 +59,9 @@ export function TemplatesPage(): JSX.Element {
         : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 12 }}>
             {docs.map((d) => {
-              const ratio = d.paper.widthMm / d.paper.heightMm
               return (
                 <Card key={d.id} size="small"
-                  cover={
-                    <div style={{ height: 140, background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <div style={{
-                        width: ratio >= 1 ? 90 : 90 * ratio,
-                        height: ratio >= 1 ? 90 / ratio : 90,
-                        background: '#fff', border: '1px solid #bbb', boxShadow: '0 1px 4px rgba(0,0,0,.15)',
-                        position: 'relative'
-                      }} />
-                    </div>
-                  }
+                  cover={<TemplateThumbnail doc={d} />}
                   actions={[
                     <Button type="link"  key="use" onClick={() => nav(`/print/${d.id}`)}>去打印</Button>,
                     <Button type="link"  key="edit" onClick={() => nav(`/designer/${d.id}`)}>编辑</Button>,

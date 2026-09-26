@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import { join } from 'node:path'
 import { paths } from './app-paths'
 import { createDb } from '../../db/client'
@@ -26,6 +26,9 @@ function createWindow(): BrowserWindow {
     height: 820,
     minWidth: 1024,
     minHeight: 700,
+    // 窗口左上角与任务栏图标；app.getAppPath() 在 dev 指向项目根、打包后指向 app.asar，
+    // 两者下 resources/icon.png 都存在（electron-builder.yml 的 files 已将 resources/** 打入包）
+    icon: join(app.getAppPath(), 'resources', 'icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -70,6 +73,8 @@ if (!gotSingleInstanceLock) {
   })
 
   app.whenReady().then(async () => {
+    // 不显示 Electron 默认菜单栏（文件/编辑/视图…）
+    Menu.setApplicationMenu(null)
     const p = paths()
     const client = createDb(p.dbFile)
     runMigrations(client)

@@ -9,6 +9,8 @@ directories:
 files:
   - out/**
   - package.json
+  # 运行时图标（窗口/任务栏）随包分发
+  - resources/**
   # 只交付 Windows x64，排除 better-sqlite3 其余平台的预编译二进制
   - "!node_modules/better-sqlite3/prebuilds/darwin-*.node"
   - "!node_modules/better-sqlite3/prebuilds/linux*.node"
@@ -16,6 +18,7 @@ files:
 asarUnpack:
   - node_modules/better-sqlite3/prebuilds/win32-x64.node
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch: [x64]
@@ -23,3 +26,5 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico

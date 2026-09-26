@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button, Card, Modal, Select, Space, Tag, message } from 'antd'
+import { Alert, Button, Card, Modal, Select, Space, Tag, message } from 'antd'
 import dayjs from 'dayjs'
 import { api } from '../api'
 import type { PrinterInfoDto, PrinterRuntimeStatus } from '../../../shared/ipc-contract'
@@ -86,6 +86,13 @@ export function BackupCard(): JSX.Element {
         <span style={{ color: '#666' }}>
           上次自动备份：{lastAt ? dayjs(lastAt).format('YYYY-MM-DD HH:mm') : '尚未备份'}（每天首次启动自动备份，保留最近 7 份）
         </span>
+        <Alert type="info" showIcon style={{ marginTop: 4 }} message="备份内容说明（单个 zip 压缩包，可整体拷贝到其他电脑恢复）" description={
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            <li><b>包含您创建和导入的全部模板</b>（版式设计、参数定义），<b>也包含系统内置的示例模板</b></li>
+            <li>包含打印历史记录，以及模板中插入的<b>图片源文件</b>和<b>应用设置</b>（默认打印机、自动更新开关等）</li>
+            <li>不包含打印缩略图（可随打印历史重新生成）和自动更新下载的安装包</li>
+          </ul>
+        } />
         <Space>
           <Button size="small" type="primary" loading={busy} onClick={async () => {
             setBusy(true)

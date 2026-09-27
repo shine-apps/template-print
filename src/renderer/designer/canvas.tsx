@@ -433,7 +433,13 @@ export function DesignerCanvas(): JSX.Element {
           removeElement(selectedId); commit()
         }
       }}
-      style={{ outline: 'none', height: '100%', overflow: 'auto', background: '#e9ecef', padding: 24 }}>
+      style={{
+        outline: 'none', height: '100%', overflow: 'auto', background: '#e9ecef', padding: 24,
+        // 把画布内部层叠关在独立 stacking context 内：Konva 各 Layer 的 canvas z-index
+        // （热区层达 9999）不得泄漏到页面根层级，否则会盖住 antd 弹层（纸张 Popover、
+        // 纸张预设 Select、Modal 等），导致落在画布区域内的弹层部分点不到。
+        isolation: 'isolate'
+      }}>
       <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ color: '#666', whiteSpace: 'nowrap' }}>缩放</span>
         <button onClick={() => setScale((s) => Math.max(0.2, +(s - 0.01).toFixed(2)))}>－</button>

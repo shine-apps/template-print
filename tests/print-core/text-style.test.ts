@@ -14,6 +14,7 @@ const props = (over: Partial<TextStyleProps> = {}): TextStyleProps => ({
   italic: false,
   underline: false,
   direction: 'horizontal',
+  columnDirection: 'rtl',
   align: 'left',
   color: '#000000',
   lineHeight: 1.2,
@@ -76,5 +77,14 @@ describe('textCssString 竖排', () => {
       .toContain('justify-content:flex-end')
     expect(textCssString(props({ direction: 'vertical', align: 'center' })).outer)
       .toContain('justify-content:center')
+  })
+
+  it('列方向：默认 rtl 输出 vertical-rl，ltr 输出 vertical-lr', () => {
+    expect(textCssString(props({ direction: 'vertical' })).inner)
+      .toContain('writing-mode:vertical-rl')
+    expect(textCssString(props({ direction: 'vertical', columnDirection: 'ltr' })).inner)
+      .toContain('writing-mode:vertical-lr')
+    expect(textCssString(props({ direction: 'vertical', columnDirection: 'ltr' })).inner)
+      .not.toContain('writing-mode:vertical-rl')
   })
 })

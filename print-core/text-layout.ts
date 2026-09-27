@@ -2,9 +2,9 @@
 // 双引号会提前闭合 style 属性导致后续声明全部丢失（打印回退默认字体/无加粗下划线）。
 // 规范真源位于 text-style.ts，此处转出以保持既有引用路径可用。
 import { SYSTEM_FONT_STACK } from './text-style'
-import type { TextDirection, TextAlign } from './text-style'
+import type { TextDirection, TextAlign, ColumnDirection } from './text-style'
 export { SYSTEM_FONT_STACK }
-export type { TextDirection, TextAlign }
+export type { TextDirection, TextAlign, ColumnDirection }
 
 export interface TextStyle {
   fontFamily: string
@@ -16,6 +16,7 @@ export interface TextStyle {
   color: string
   lineHeight: number
   direction: TextDirection
+  columnDirection: ColumnDirection
 }
 
 export interface Measurer {
@@ -188,16 +189,21 @@ export function layoutText(
     return { lines, widthMm: boxW, heightMm: Math.min(contentH, boxH) }
   }
 
-  // 竖排：lines 即列，按视觉顺序右→左
+  // 竖排：lines 即列。列组水平位置由 columnDirection 决定列序：
+  //   rtl（默认）首列在最右、向左换列（vertical-rl）；ltr 首列在最左、向右换列（vertical-lr）。
+  // 对齐语义与打印端 CSS 一致且与列方向无关：align 'left'=列组贴右、'right'=贴左、center 居中。
   const colW = fs
   const occupied = round2(rawLines.length * colW + Math.max(0, rawLines.length - 1) * (pitch - colW))
-  let rightEdge = boxW // 最右列的右边缘（= 首列 x + colW）
-  if (st.align === 'left') rightEdge = boxW
-  else if (st.align === 'right') rightEdge = occupied
-  else rightEdge = round2((boxW + occupied) / 2)
+  let leftEdge = boxW - occupied // 列组左缘
+  if (st.align === 'left') leftEdge = round2(boxW - occupied) // 贴右
+  else if (st.align === 'right') leftEdge = 0 // 贴左
+  else leftEdge = round2((boxW - occupied) / 2)
 
+  const ltr = st.columnDirection === 'ltr'
   rawLines.forEach((ln, i) => {
-    const x = round2(rightEdge - colW - i * pitch)
+    // 列序：ltr 首列在最左（i 向右递增）；rtl 首列在最右（i 向左递减）
+    const colIndex = ltr ? i : rawLines.length - 1 - i
+    const x = round2(leftEdge + colIndex * pitch)
     let cy = 0
     const chars: LaidChar[] = ln.cells.map((c) => {
       // 正立字形在 1em 字身格内水平居中（数字/英文墨迹窄于字身格，汉字 c.w≈fs 偏移≈0）

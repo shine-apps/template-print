@@ -93,6 +93,14 @@ describe('renderPrintDocument', () => {
     expect(html).toContain('word-break:break-word')
   })
 
+  it('竖排 columnDirection=ltr 输出 writing-mode:vertical-lr', () => {
+    const doc = baseDoc([createElement('text', { text: '甲{{乙}}', direction: 'vertical', columnDirection: 'ltr', align: 'left' }, { x: 1, y: 1, w: 20, h: 40 })])
+    const html = renderPrintDocument(doc, { 乙: '乙' }, {})
+    expect(html).toContain('writing-mode:vertical-lr')
+    expect(html).not.toContain('writing-mode:vertical-rl')
+    expect(html).toContain('flex-direction:row-reverse')
+  })
+
   it('横排文本内层撑满元素框并裁剪溢出（height:100% + overflow:hidden）', () => {
     const doc = baseDoc([createElement('text', { text: '很长的中文内容'.repeat(8) }, { x: 1, y: 1, w: 30, h: 10 })])
     const html = renderPrintDocument(doc, {}, {})

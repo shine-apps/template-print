@@ -62,6 +62,7 @@ function renderTextHtml(
     italic: boolean
     underline: boolean
     direction: 'horizontal' | 'vertical'
+    columnDirection: 'rtl' | 'ltr'
     align: 'left' | 'center' | 'right'
     color: string
     lineHeight: number
@@ -71,7 +72,7 @@ function renderTextHtml(
   const body = textSegments(p.text, values)
   const { outer, inner } = textCssString(p)
   if (p.direction === 'vertical') {
-    // 外层 flex row-reverse 实现列组对齐（left=贴右=flex-start）；内层 vertical-rl 实现竖排
+    // 外层 flex row-reverse 实现列组对齐（left=贴右=flex-start）；内层 writing-mode 按列方向竖排（vertical-rl/vertical-lr）
     return `<div style="${outer}"><div style="${inner}">${body}</div></div>`
   }
   // height:100% 把文本约束在元素框内，flex + align-items:safe center 实现垂直居中；

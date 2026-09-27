@@ -158,7 +158,7 @@ function ThumbElement({ el, assetUrls }: {
           <div style={{ display: 'flex', flexDirection: 'row-reverse', justifyContent: justify, width: '100%', height: '100%', overflow: 'hidden' }}>
             <div style={{
               ...fontStyle,
-              writingMode: 'vertical-rl',
+              writingMode: p.columnDirection === 'ltr' ? 'vertical-lr' : 'vertical-rl',
               textOrientation: 'upright',
               height: '100%',
               textDecoration: p.underline ? 'underline' : 'none'

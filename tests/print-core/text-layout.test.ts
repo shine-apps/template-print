@@ -10,7 +10,8 @@ const m: Measurer = {
 }
 const style = (over: Partial<TextStyle> = {}): TextStyle => ({
   fontFamily: '', fontSizeMm: 10, bold: false, italic: false, underline: false,
-  align: 'left', color: '#000000', lineHeight: 1.2, direction: 'horizontal', ...over
+  align: 'left', color: '#000000', lineHeight: 1.2, direction: 'horizontal',
+  columnDirection: 'rtl', ...over
 })
 
 describe('横排', () => {
@@ -146,6 +147,21 @@ describe('竖排', () => {
     expect(left.lines[0].chars[0].x).toBe(90)
     expect(right.lines[0].chars[0].x).toBe(0)
     expect(center.lines[0].chars[0].x).toBe(45) // (100-10)/2
+  })
+  it('列方向 ltr：首列在左、向右换列（align left=贴右语义不变）', () => {
+    const r = layoutText('一二三四', 100, 25, v({ columnDirection: 'ltr' }), m) // 列容量 2 字
+    expect(r.lines).toHaveLength(2)
+    expect(r.lines[0].chars.map((c) => c.ch).join('')).toBe('一二')
+    expect(r.lines[1].chars.map((c) => c.ch).join('')).toBe('三四')
+    // 列组宽 = 2*10 + 1*(12-10) = 22；align left 贴右 → 首列左缘 100-22=78，次列 +12=90
+    expect(r.lines[0].chars[0].x).toBe(78)
+    expect(r.lines[1].chars[0].x).toBe(90)
+  })
+  it('列方向 ltr：align 语义与 rtl 一致（right 贴左、center 居中）', () => {
+    const right = layoutText('一', 100, 25, v({ columnDirection: 'ltr', align: 'right' as never }), m)
+    const center = layoutText('一', 100, 25, v({ columnDirection: 'ltr', align: 'center' as never }), m)
+    expect(right.lines[0].chars[0].x).toBe(0)
+    expect(center.lines[0].chars[0].x).toBe(45)
   })
   it('下划线为竖直线段', () => {
     const r = layoutText('一', 100, 25, v({ underline: true }), m)

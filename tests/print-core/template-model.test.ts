@@ -39,6 +39,7 @@ describe('模板模型校验', () => {
     const t = parsed.content.elements.find((e) => e.type === 'text')!
     expect(t.props.underline).toBe(false)
     expect(t.props.direction).toBe('horizontal')
+    expect(t.props.columnDirection).toBe('rtl')
   })
 
   it('v3：direction 仅接受 horizontal/vertical；underline 为布尔', () => {

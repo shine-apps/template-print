@@ -10,6 +10,8 @@ export const SYSTEM_FONT_STACK =
 
 export type TextDirection = 'horizontal' | 'vertical'
 export type TextAlign = 'left' | 'center' | 'right'
+/** 竖排多行（列）方向：rtl=从右到左（vertical-rl）、ltr=从左到右（vertical-lr） */
+export type ColumnDirection = 'ltr' | 'rtl'
 
 export interface TextStyleProps {
   fontFamily: string
@@ -18,6 +20,7 @@ export interface TextStyleProps {
   italic: boolean
   underline: boolean
   direction: TextDirection
+  columnDirection: ColumnDirection
   align: TextAlign
   color: string
   lineHeight: number
@@ -73,7 +76,9 @@ export function textCssProps(p: TextStyleProps): {
         overflow: 'hidden'
       },
       inner: {
-        writingMode: 'vertical-rl',
+        // 列方向：rtl 用 vertical-rl（从右到左），ltr 用 vertical-lr（从左到右）；
+        // 外层 flex row-reverse 的对齐语义与列方向无关，保持不变
+        writingMode: p.columnDirection === 'ltr' ? 'vertical-lr' : 'vertical-rl',
         // upright：竖排中汉字、数字、英文字母一律正立（每个半角字符占一个字身格）；
         // 如需拉丁/数字顺时针横躺的传统混排，改回 'mixed'
         textOrientation: 'upright',

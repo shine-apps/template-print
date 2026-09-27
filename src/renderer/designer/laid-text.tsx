@@ -60,7 +60,8 @@ export function LaidText({ el, scale, shapeRef, commonProps, onEdit }: LaidTextP
     align: el.props.align,
     color: el.props.color,
     lineHeight: el.props.lineHeight,
-    direction: el.props.direction
+    direction: el.props.direction,
+    columnDirection: el.props.columnDirection
   }), [el.props])
 
   const laid = useMemo(

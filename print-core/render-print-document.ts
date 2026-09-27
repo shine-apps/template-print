@@ -1,6 +1,6 @@
 import type { TemplateDocument, TemplateElement } from './template-model'
 import { EMPTY_LINE_TOKEN } from './param-evaluator'
-import { SYSTEM_FONT_STACK } from './text-layout'
+import { textCssString } from './text-style'
 
 export interface RenderOptions {
   /** assetId → 可在打印窗口/预览中访问的图片 URL（file:// 或 data:） */
@@ -53,14 +53,6 @@ function textSegments(text: string, values: Record<string, string>): string {
   return parts.join('')
 }
 
-function fontCss(p: { fontFamily: string; fontSizeMm: number; bold: boolean; italic: boolean }): string {
-  const family = p.fontFamily.trim() === ''
-    ? SYSTEM_FONT_STACK
-    : `'${p.fontFamily.replace(/'/g, '\\\'')}', ${SYSTEM_FONT_STACK}`
-  return `font-family:${family};font-size:${p.fontSizeMm}mm;` +
-    `font-weight:${p.bold ? 'bold' : 'normal'};font-style:${p.italic ? 'italic' : 'normal'}`
-}
-
 function renderTextHtml(
   p: {
     text: string
@@ -77,19 +69,15 @@ function renderTextHtml(
   values: Record<string, string>
 ): string {
   const body = textSegments(p.text, values)
-  const deco = p.underline ? 'text-decoration:underline;text-decoration-thickness:0.2mm;' : ''
+  const { outer, inner } = textCssString(p)
   if (p.direction === 'vertical') {
-    const justify = p.align === 'left' ? 'flex-start' : p.align === 'right' ? 'flex-end' : 'center'
     // 外层 flex row-reverse 实现列组对齐（left=贴右=flex-start）；内层 vertical-rl 实现竖排
-    return `<div style="display:flex;flex-direction:row-reverse;justify-content:${justify};width:100%;height:100%;overflow:hidden">` +
-      `<div style="writing-mode:vertical-rl;text-orientation:mixed;height:100%;${fontCss(p)};` +
-      `color:${p.color};line-height:${p.lineHeight};white-space:pre-wrap;word-break:break-word;overflow:hidden;${deco}">${body}</div></div>`
+    return `<div style="${outer}"><div style="${inner}">${body}</div></div>`
   }
   // height:100% 把文本约束在元素框内，flex + align-items:safe center 实现垂直居中；
   // safe 关键字：内容溢出时自动退化为 flex-start（从顶部开始），避免首行被裁掉；
   // 超出部分由 overflow:hidden 裁剪（与画布 LaidText 裁剪一致）
-  return `<div style="display:flex;align-items:safe center;height:100%;${fontCss(p)};color:${p.color};line-height:${p.lineHeight};` +
-    `text-align:${p.align};white-space:pre-wrap;word-break:break-word;overflow:hidden;${deco}">${body}</div>`
+  return `<div style="${outer}">${body}</div>`
 }
 
 function renderElement(el: TemplateElement, values: Record<string, string>, assetUrls: Record<string, string>): string {

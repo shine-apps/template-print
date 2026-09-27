@@ -50,6 +50,67 @@ describe('横排', () => {
   })
 })
 
+describe('DOM 像素补偿通道（measureHorizontal）', () => {
+  function makeProbe(result: ReturnType<NonNullable<Measurer['measureHorizontal']>>): Measurer {
+    return { measureChar: m.measureChar, measureHorizontal: () => result }
+  }
+
+  it('采用探针实测的逐字 x 与基线 y，行标记 alphabetic 基线', () => {
+    const pm = makeProbe([
+      { x: 5, top: 7, widthMm: 20, baselineY: 15.5, chars: [
+        { ch: '甲', x: 5 }, { ch: '乙', x: 15 }
+      ] }
+    ])
+    const r = layoutText('甲乙', 30, 100, style(), pm)
+    expect(r.lines).toHaveLength(1)
+    expect(r.lines[0].baseline).toBe('alphabetic')
+    expect(r.lines[0].chars).toEqual([
+      { ch: '甲', x: 5, y: 15.5, rotated: false },
+      { ch: '乙', x: 15, y: 15.5, rotated: false }
+    ])
+    expect(r.widthMm).toBe(30)
+  })
+
+  it('下划线按探针实测的行几何生成（x/宽取实测，y=行顶+0.9 字号）', () => {
+    const pm = makeProbe([
+      { x: 5, top: 7, widthMm: 20, baselineY: 15.5, chars: [
+        { ch: '甲', x: 5 }, { ch: '乙', x: 15 }
+      ] }
+    ])
+    const r = layoutText('甲乙', 30, 100, style({ underline: true }), pm)
+    const u = r.lines[0].underlines[0]
+    expect(u.x).toBe(5)
+    expect(u.w).toBe(20)
+    expect(u.y).toBe(16) // top 7 + 10*0.9
+    expect(u.h).toBeLessThan(1)
+  })
+
+  it('探针返回 null 时回退手工排版（含半行距补偿）', () => {
+    const pm = makeProbe(null)
+    const r = layoutText('一二三四五六', 30, 100, style(), pm)
+    expect(r.lines).toHaveLength(2)
+    expect(r.lines[0].baseline).toBeUndefined()
+    expect(r.lines[1].chars[0].y).toBe(51)
+  })
+
+  it('探针返回空数组时同样回退手工排版', () => {
+    const pm = makeProbe([])
+    const r = layoutText('a', 100, 100, style(), pm)
+    expect(r.lines).toHaveLength(1)
+    expect(r.lines[0].baseline).toBeUndefined()
+  })
+
+  it('竖排不调用横排探针', () => {
+    let called = false
+    const pm: Measurer = {
+      measureChar: m.measureChar,
+      measureHorizontal: () => { called = true; return null }
+    }
+    layoutText('一二', 100, 25, style({ direction: 'vertical' }), pm)
+    expect(called).toBe(false)
+  })
+})
+
 describe('竖排', () => {
   const v = (over: Partial<TextStyle> = {}) => style({ direction: 'vertical', ...over })
   it('首列贴右、满列向左换列；汉字正立', () => {
@@ -61,10 +122,22 @@ describe('竖排', () => {
     expect(r.lines[1].chars[0].x).toBe(78) // 列距 12
     expect(r.lines[0].chars[0].rotated).toBe(false)
   })
-  it('ASCII 字符 rotated=true；字位仍按方格', () => {
+  it('ASCII 字符竖排也正立（rotated=false），字位按方格排列', () => {
     const r = layoutText('A一', 100, 25, v(), m)
-    expect(r.lines[0].chars[0].rotated).toBe(true)
+    expect(r.lines[0].chars[0].rotated).toBe(false)
     expect(r.lines[0].chars[1].rotated).toBe(false)
+  })
+  it('正立英数每字占 1em 字身格推进，超框高与打印端同样换列', () => {
+    // 假测量 ASCII 墨迹宽 5mm，但竖排步进须按 10mm；3 字共 30mm > 框高 25mm → 换列
+    const r = layoutText('AB一', 100, 25, v(), m)
+    expect(r.lines).toHaveLength(2)
+    expect(r.lines[0].chars.map((c) => c.ch).join('')).toBe('AB')
+    expect(r.lines[1].chars.map((c) => c.ch).join('')).toBe('一')
+  })
+  it('正立英数字形在字身格内水平居中（汉字偏移≈0）', () => {
+    const r = layoutText('A一', 100, 25, v(), m) // 首列 x=90；A 墨迹 5mm → 居中偏移 2.5
+    expect(r.lines[0].chars[0].x).toBe(92.5)
+    expect(r.lines[0].chars[1].x).toBe(90)
   })
   it('align 映射：right 贴左、center 居中', () => {
     const left = layoutText('一', 100, 25, v({ align: 'left' as never }), m)  // left=贴右

@@ -86,7 +86,7 @@ describe('renderPrintDocument', () => {
     const doc = baseDoc([createElement('text', { text: '甲{{乙}}', direction: 'vertical', align: 'left' }, { x: 1, y: 1, w: 20, h: 40 })])
     const html = renderPrintDocument(doc, { 乙: '乙' }, {})
     expect(html).toContain('writing-mode:vertical-rl')
-    expect(html).toContain('text-orientation:mixed')
+    expect(html).toContain('text-orientation:upright')
     expect(html).toContain('flex-direction:row-reverse')
     expect(html).toContain('justify-content:flex-start')
     // 竖排同样允许超长 ASCII 串逐字断列，与 layoutText 强制断字一致

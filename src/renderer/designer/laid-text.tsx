@@ -4,6 +4,7 @@ import type Konva from 'konva'
 import { mmToPxAt96 } from '../../../shared/units'
 import { layoutText, SYSTEM_FONT_STACK, type Measurer, type TextStyle } from '../../../print-core/text-layout'
 import type { TemplateElement } from '../../../print-core/template-model'
+import { measureHorizontalDom } from './dom-text-probe'
 
 type TextEl = Extract<TemplateElement, { type: 'text' }>
 
@@ -20,7 +21,10 @@ function createPxMeasurer(scale: number): Measurer {
       ctx.font = `${st.italic ? 'italic ' : ''}${st.bold ? 'bold ' : ''}${fsPx}px ${family}`
       const wPxAt96 = ctx.measureText(ch).width / scale
       return { w: wPxAt96 / mmToPxAt96(1), h: fontSizeMm }
-    }
+    },
+    // 横排走 DOM 像素补偿：探针以打印端同款 CSS 实测逐字几何（竖排返回 null，由手工排版处理）
+    measureHorizontal: (text, boxW, boxH, st) =>
+      st.direction === 'vertical' ? null : measureHorizontalDom(text, boxW, boxH, st)
   }
 }
 
@@ -33,7 +37,8 @@ export interface LaidTextProps {
 }
 
 export function LaidText({ el, scale, shapeRef, commonProps, onEdit }: LaidTextProps): JSX.Element {
-  const [, force] = useReducer((x: number) => x + 1, 0)
+  // 字体异步加载完成后自增：DOM 探针测量与画布重绘都依赖最终字体度量
+  const [fontTick, force] = useReducer((x: number) => x + 1, 0)
   const wPx = mmToPxAt96(el.w) * scale
   const hPx = mmToPxAt96(el.h) * scale
 
@@ -60,7 +65,8 @@ export function LaidText({ el, scale, shapeRef, commonProps, onEdit }: LaidTextP
 
   const laid = useMemo(
     () => layoutText(el.props.text, el.w, el.h, st, createPxMeasurer(scale)),
-    [el.props.text, el.w, el.h, st, scale]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [el.props.text, el.w, el.h, st, scale, fontTick]
   )
 
   const family = el.props.fontFamily.trim() === ''
@@ -80,8 +86,9 @@ export function LaidText({ el, scale, shapeRef, commonProps, onEdit }: LaidTextP
         ctx.clip()
         ctx.font = `${el.props.italic ? 'italic ' : ''}${el.props.bold ? 'bold ' : ''}${fsPx}px ${family}`
         ctx.fillStyle = el.props.color
-        ctx.textBaseline = 'top'
         for (const line of laid.lines) {
+          // DOM 实测行按字母基线落字；手工排版行（含竖排）按 em-box 顶部
+          ctx.textBaseline = line.baseline === 'alphabetic' ? 'alphabetic' : 'top'
           for (const c of line.chars) {
             const x = mmToPxAt96(c.x) * scale
             const y = mmToPxAt96(c.y) * scale

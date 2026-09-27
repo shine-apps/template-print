@@ -159,7 +159,7 @@ function ThumbElement({ el, assetUrls }: {
             <div style={{
               ...fontStyle,
               writingMode: 'vertical-rl',
-              textOrientation: 'mixed',
+              textOrientation: 'upright',
               height: '100%',
               textDecoration: p.underline ? 'underline' : 'none'
             }}>{textSegments(p.text)}</div>

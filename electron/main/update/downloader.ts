@@ -4,6 +4,7 @@ import * as http from 'node:http'
 import * as https from 'node:https'
 import { pipeline } from 'node:stream/promises'
 import type { IncomingMessage } from 'node:http'
+import { updateRequestHeaders } from '../../../shared/update-config'
 
 export interface DownloadProgress {
   downloaded: number
@@ -78,6 +79,7 @@ export async function electronNetRequest(
   const { net } = await import('electron')
   return new Promise((resolve, reject) => {
     const req = net.request(url)
+    for (const [name, value] of Object.entries(updateRequestHeaders())) req.setHeader(name, value)
     if (rangeStart !== null) req.setHeader('Range', `bytes=${rangeStart}-`)
     signal.addEventListener('abort', () => {
       req.abort()
@@ -89,7 +91,7 @@ export async function electronNetRequest(
   })
 }
 
-/** 测试请求函数：node 原生 http(s)，跟随 3xx 跳转一层 */
+/** 测试请求函数：node 原生 http(s)，跟随 3xx 跳转一层；请求头与生产路径一致 */
 export function nodeHttpRequest(
   url: string,
   rangeStart: number | null,
@@ -98,7 +100,9 @@ export function nodeHttpRequest(
   if (signal.aborted) return Promise.reject(new DownloadCanceled())
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https:') ? https : http
-    const req = lib.get(url, { headers: rangeStart !== null ? { Range: `bytes=${rangeStart}-` } : {} }, (res) => {
+    const headers = updateRequestHeaders()
+    if (rangeStart !== null) headers.Range = `bytes=${rangeStart}-`
+    const req = lib.get(url, { headers }, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume()
         nodeHttpRequest(new URL(res.headers.location, url).toString(), rangeStart, signal).then(resolve, reject)

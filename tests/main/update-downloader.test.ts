@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { createServer, type Server } from 'node:http'
+import { createServer, type Server, type IncomingHttpHeaders } from 'node:http'
 import { mkdirSync, existsSync, statSync, writeFileSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -52,6 +52,25 @@ describe('parseContentRange', () => {
     expect(parseContentRange('bytes 100-199/1000')).toBe(1000)
     expect(parseContentRange('bytes 0-99/*')).toBeNull()
     expect(parseContentRange(undefined)).toBeNull()
+  })
+})
+
+describe('nodeHttpRequest 请求头（与生产路径共用 updateRequestHeaders）', () => {
+  it('携带防盗链 Referer，且与 Range 兼容', async () => {
+    const seen: IncomingHttpHeaders[] = []
+    const s = createServer((req, res) => {
+      seen.push(req.headers)
+      res.statusCode = 200
+      res.end('ok')
+    })
+    const url = await listen(s)
+    ;(await nodeHttpRequest(url, 10, new AbortController().signal)).destroy()
+    ;(await nodeHttpRequest(url, null, new AbortController().signal)).destroy()
+    s.close()
+    expect(seen[0].referer).toBe('https://dl.templateprint.app/')
+    expect(seen[0].range).toBe('bytes=10-')
+    expect(seen[1].referer).toBe('https://dl.templateprint.app/')
+    expect(seen[1].range).toBeUndefined()
   })
 })
 

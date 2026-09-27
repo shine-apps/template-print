@@ -67,9 +67,56 @@ jobs:
       - name: Extract release notes for this version
         run: node scripts/release/prepare-notes.mjs $env:VERSION
 
+      # ---- Domestic mirror (Tencent COS): optional, enabled by repository secrets ----
+      # Configure COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION to have the
+      # installer and latest.json uploaded to COS, with the manifest "url" pointing at
+      # the COS direct link so clients download from inside mainland China.
+      - name: Detect COS mirror configuration
+        shell: powershell
+        env:
+          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+        run: |
+          if ($env:COS_SECRET_ID) {
+            "COS_ENABLED=1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+            Write-Host 'COS mirror enabled'
+          } else {
+            Write-Host 'COS mirror not configured; manifest will point at the GitHub Release'
+          }
+
+      - name: Upload installers to Tencent COS
+        if: env.COS_ENABLED == '1'
+        shell: powershell
+        env:
+          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+          COS_BUCKET: ${{ secrets.COS_BUCKET }}
+          COS_REGION: ${{ secrets.COS_REGION }}
+        run: |
+          ./scripts/upload-to-cos.ps1 -Path "release/TemplatePrint-$env:VERSION-Setup-x64.exe","release/TemplatePrint-$env:VERSION-Setup-x64.msi"
+
       - name: Generate latest.json (size + sha256)
-        shell: pwsh
-        run: powershell -ExecutionPolicy Bypass -File ./scripts/build-update-manifest.ps1
+        shell: powershell
+        env:
+          COS_BUCKET: ${{ secrets.COS_BUCKET }}
+          COS_REGION: ${{ secrets.COS_REGION }}
+        run: |
+          $setup = "release/TemplatePrint-$env:VERSION-Setup-x64.msi"
+          if ($env:COS_ENABLED -eq '1') {
+            ./scripts/build-update-manifest.ps1 -SetupPath $setup -AssetBaseUrl "https://$env:COS_BUCKET.cos.$env:COS_REGION.myqcloud.com/"
+          } else {
+            ./scripts/build-update-manifest.ps1 -SetupPath $setup
+          }
+
+      - name: Upload latest.json to Tencent COS
+        if: env.COS_ENABLED == '1'
+        shell: powershell
+        env:
+          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+          COS_BUCKET: ${{ secrets.COS_BUCKET }}
+          COS_REGION: ${{ secrets.COS_REGION }}
+        run: |
+          ./scripts/upload-to-cos.ps1 -Path 'release/latest.json'
 
       - name: Create/update GitHub Release
         uses: softprops/action-gh-release@v2

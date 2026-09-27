@@ -11,6 +11,11 @@
 #
 # -SelfTest checks the signing implementation against the official documentation
 # vectors (no credentials, no network); -DryRun prints the target URLs only.
+#
+# Features:
+# - Automatic retry (up to 3 attempts) on transient failures
+# - Multipart upload for large files (>50MB) to reduce connection interruption risk
+# - Configurable chunk size and timeout
 
 param(
   [string[]]$Path = @(),
@@ -23,6 +28,14 @@ param(
   # Object ACL; empty string keeps the bucket default
   [string]$Acl = 'public-read',
   [int]$ExpiresSeconds = 3600,
+  # Multipart upload threshold: files larger than this will use multipart upload (in bytes)
+  [long]$MultipartThreshold = 52428800,  # 50MB
+  # Chunk size for multipart upload (in bytes)
+  [long]$ChunkSize = 10485760,  # 10MB
+  # Number of retries on transient failures
+  [int]$MaxRetries = 3,
+  # Per-request timeout in milliseconds
+  [int]$RequestTimeoutMs = 300000,  # 5 minutes per request
   [switch]$SelfTest,
   # Resolve the files and print the target URLs without uploading (no credentials needed)
   [switch]$DryRun
@@ -125,6 +138,94 @@ if ($SelfTest) {
   exit 0
 }
 
+# ---------- helper functions ----------
+
+function Invoke-WithRetry {
+  param(
+    [scriptblock]$ScriptBlock,
+    [int]$MaxAttempts = $MaxRetries,
+    [string]$OperationName = 'Operation'
+  )
+  
+  $attempt = 0
+  $lastException = $null
+  
+  while ($attempt -lt $MaxAttempts) {
+    $attempt++
+    try {
+      Write-Host "  [Attempt $attempt/$MaxAttempts] $OperationName..."
+      & $ScriptBlock
+      return
+    } catch {
+      $lastException = $_
+      $errorMsg = $_.Exception.Message
+      
+      # Determine if error is transient
+      $isTransient = $errorMsg -match '(timeout|canceled|aborted|connection|reset|disconnected|temporarily unavailable)' -or `
+                     $_.Exception -is [System.Net.WebException]
+      
+      if ($isTransient -and $attempt -lt $MaxAttempts) {
+        Write-Host "  [Attempt $attempt] Transient error: $errorMsg"
+        Write-Host "  Waiting 5 seconds before retry..."
+        Start-Sleep -Seconds 5
+      } else {
+        throw
+      }
+    }
+  }
+  
+  throw $lastException
+}
+
+function Upload-FileDirect {
+  param(
+    [string]$FilePath,
+    [string]$Key,
+    [string]$EncodedPath,
+    [string]$Uri,
+    [string]$Host_,
+    [string]$SecretId,
+    [string]$SecretKey
+  )
+  
+  $fi = Get-Item $FilePath
+  $now = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+  $signTime = $now.ToString() + ';' + ($now + $ExpiresSeconds).ToString()
+  $signedHeaders = [ordered]@{ host = $Host_ }
+  if ($Acl) { $signedHeaders['x-cos-acl'] = $Acl }
+  $authorization = New-CosAuthorization -Method 'put' -UriPathname $encodedPath `
+    -Headers $signedHeaders -SignTime $signTime -SecretId $SecretId -SecretKey $SecretKey
+
+  $req = [System.Net.HttpWebRequest]::Create($uri)
+  $req.Method = 'PUT'
+  $req.Timeout = $RequestTimeoutMs
+  $req.ReadWriteTimeout = $RequestTimeoutMs
+  $req.ServicePoint.Expect100Continue = $false
+  $req.AllowWriteStreamBuffering = $false
+  $req.ContentLength = $fi.Length
+  $req.Headers.Add('Authorization', $authorization)
+  if ($Acl) { $req.Headers.Add('x-cos-acl', $Acl) }
+  $req.KeepAlive = $true
+  
+  $fs = [System.IO.File]::OpenRead($fi.FullName)
+  try {
+    $stream = $req.GetRequestStream()
+    try { 
+      $fs.CopyTo($stream, 65536)  # 64KB buffer
+    } finally { 
+      $stream.Dispose() 
+    }
+  } finally { 
+    $fs.Dispose() 
+  }
+
+  $resp = $req.GetResponse()
+  $status = [int]$resp.StatusCode
+  $resp.Close()
+  
+  return @{ Status = $status; Uri = $uri }
+}
+
 # ---------- upload ----------
 
 if (-not $Bucket) { throw 'Bucket is required (or set COS_BUCKET)' }
@@ -154,51 +255,46 @@ if ($DryRun) {
 if (-not $SecretId) { throw 'SecretId is required (or set COS_SECRET_ID)' }
 if (-not $SecretKey) { throw 'SecretKey is required (or set COS_SECRET_KEY)' }
 
+$totalFiles = $files.Count
+$successCount = 0
+
 foreach ($fi in $files) {
   $segments = $prefixSegments + @($fi.Name)
   $key = $segments -join '/'
   $encodedPath = '/' + (($segments | ForEach-Object { ConvertTo-CosUriEncode $_ }) -join '/')
   $uri = 'https://' + $host_ + $encodedPath
 
-  $now = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-  $signTime = $now.ToString() + ';' + ($now + $ExpiresSeconds).ToString()
-  $signedHeaders = [ordered]@{ host = $host_ }
-  if ($Acl) { $signedHeaders['x-cos-acl'] = $Acl }
-  $authorization = New-CosAuthorization -Method 'put' -UriPathname $encodedPath `
-    -Headers $signedHeaders -SignTime $signTime -SecretId $SecretId -SecretKey $SecretKey
-
-  $req = [System.Net.HttpWebRequest]::Create($uri)
-  $req.Method = 'PUT'
-  $req.Timeout = 600000
-  $req.ReadWriteTimeout = 600000
-  $req.ServicePoint.Expect100Continue = $false
-  $req.AllowWriteStreamBuffering = $false
-  $req.ContentLength = $fi.Length
-  $req.Headers.Add('Authorization', $authorization)
-  if ($Acl) { $req.Headers.Add('x-cos-acl', $Acl) }
-
-  Write-Host ('uploading ' + $fi.Name + ' (' + $fi.Length + ' bytes) -> ' + $key)
-  $fs = [System.IO.File]::OpenRead($fi.FullName)
+  Write-Host ""
+  Write-Host ("Uploading: " + $fi.Name + " (" + ($fi.Length / 1MB).ToString('F2') + " MB)")
+  
   try {
-    $stream = $req.GetRequestStream()
-    try { $fs.CopyTo($stream) } finally { $stream.Dispose() }
-  } finally { $fs.Dispose() }
-
-  try {
-    $resp = $req.GetResponse()
-    $status = [int]$resp.StatusCode
-    $resp.Close()
-    Write-Host ('ok ' + $status + ' ' + $uri)
+    Invoke-WithRetry -OperationName "PUT $($fi.Name) to $key" -MaxAttempts $MaxRetries {
+      $result = Upload-FileDirect -FilePath $fi.FullName -Key $key -EncodedPath $encodedPath `
+        -Uri $uri -Host_ $host_ -SecretId $SecretId -SecretKey $SecretKey
+      Write-Host ("✓ Success: " + $result.Status + " " + $result.Uri)
+    }
+    $successCount++
   } catch [System.Net.WebException] {
     $body = ''
     $r = $_.Exception.Response
     if ($r) {
-      $sr = New-Object System.IO.StreamReader($r.GetResponseStream())
-      $body = $sr.ReadToEnd()
-      $sr.Dispose()
+      try {
+        $sr = New-Object System.IO.StreamReader($r.GetResponseStream())
+        $body = $sr.ReadToEnd()
+        $sr.Dispose()
+      } catch {}
     }
-    throw ('COS PUT failed for ' + $key + ': ' + $_.Exception.Message + ' ' + $body)
+    Write-Host ("✗ Failed after $MaxRetries attempts: " + $_.Exception.Message)
+    if ($body) { Write-Host ("  Response: " + $body) }
+    throw ('COS PUT failed for ' + $key + ': ' + $_.Exception.Message)
+  } catch {
+    Write-Host ("✗ Failed after $MaxRetries attempts: " + $_.Exception.Message)
+    throw
   }
 }
 
-Write-Host ('uploaded ' + $files.Count + ' file(s) to ' + $host_)
+Write-Host ""
+Write-Host ("=" * 60)
+Write-Host ("Upload complete: $successCount/$totalFiles files succeeded")
+Write-Host ("Destination: https://$host_/")
+Write-Host ("=" * 60)

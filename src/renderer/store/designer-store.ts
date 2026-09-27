@@ -14,11 +14,15 @@ interface DesignerState {
   doc: TemplateDocument
   mode: Mode
   selectedId: string | null
+  /** 双击画布文本时递增的信号，属性面板据此聚焦文本编辑框（0=从未请求） */
+  textEditNonce: number
   dirty: boolean
   past: TemplateDocument[]
   future: TemplateDocument[]
   load(doc: TemplateDocument, mode: Mode): void
   select(id: string | null): void
+  /** 双击画布文本：选中该元素并请求属性面板聚焦其文本输入框 */
+  requestTextEdit(id: string): void
   mutate(fn: (d: TemplateDocument) => void): void
   commit(): void
   undo(): void
@@ -49,15 +53,19 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   doc: placeholder,
   mode: 'template',
   selectedId: null,
+  textEditNonce: 0,
   dirty: false,
   past: [],
   future: [],
 
   load(doc, mode) {
-    set({ doc: clone(doc), mode, selectedId: null, dirty: false, past: [], future: [] })
+    set({ doc: clone(doc), mode, selectedId: null, textEditNonce: 0, dirty: false, past: [], future: [] })
   },
   select(id) {
     set({ selectedId: id })
+  },
+  requestTextEdit(id) {
+    set({ selectedId: id, textEditNonce: get().textEditNonce + 1 })
   },
   mutate(fn) {
     const cur = get().doc

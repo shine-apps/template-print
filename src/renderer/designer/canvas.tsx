@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { Slider } from 'antd'
 import { Stage, Layer, Rect, Image as KImage, Line, Ellipse, Group, Transformer } from 'react-konva'
@@ -44,27 +44,26 @@ function buildSegments(all: TemplateElement[]): Seg[] {
   return segs
 }
 
-/** 非文本元素（图片/形状）的 Konva 渲染与交互，与原 ElementShape 一致 */
-function NonTextShape({ el, scale, selected, onSelect, onChange, assetUrls, onDragMove, onDragEnd }: {
+/** 非文本元素（图片/形状）的 Konva 渲染与交互，与原 ElementShape 一致。
+ *  只渲染节点本身；Transformer 由父层在全部节点之后统一渲染，避免锚点命中像素
+ *  被同层后绘制的其他元素热区覆盖。 */
+function NonTextShape({ el, scale, onSelect, onChange, assetUrls, onDragMove, onDragEnd, registerNode }: {
   el: TemplateElement
   scale: number
-  selected: boolean
   onSelect: () => void
   onChange: (patch: Partial<Pick<TemplateElement, 'x' | 'y' | 'w' | 'h' | 'rotation'>>) => void
   assetUrls: Record<string, string>
   onDragMove: (el: TemplateElement, node: Konva.Node) => void
   onDragEnd: (el: TemplateElement, node: Konva.Node) => void
+  registerNode: (id: string, node: Konva.Node | null) => void
 }): JSX.Element {
   const shapeRef = useRef<Konva.Node>(null)
-  const trRef = useRef<Konva.Transformer>(null)
   const imageEl = useLoadedImage(el.type === 'image' ? assetUrls[el.props.assetId] : undefined)
 
   useEffect(() => {
-    if (selected && shapeRef.current && trRef.current) {
-      trRef.current.nodes([shapeRef.current])
-      trRef.current.getLayer()?.batchDraw()
-    }
-  }, [selected])
+    registerNode(el.id, shapeRef.current)
+    return () => registerNode(el.id, null)
+  }, [el.id, registerNode])
 
   const common = {
     id: el.id,
@@ -175,17 +174,7 @@ function NonTextShape({ el, scale, selected, onSelect, onChange, assetUrls, onDr
     body = <Rect ref={shapeRef as never} {...common} fill="#e6f4ff" stroke="#1677ff" dash={[6, 4]} />
   }
 
-  return (
-    <>
-      {body}
-      {selected && (
-        <Transformer ref={trRef}
-          enabledAnchors={isGroupWrapped(el) ? [] : undefined}
-          boundBoxFunc={(oldBox, newBox) =>
-            newBox.width < 4 || newBox.height < 4 ? oldBox : newBox} />
-      )}
-    </>
-  )
+  return body
 }
 
 /**
@@ -220,59 +209,73 @@ function TextDom({ el, scale, registerRef }: {
   )
 }
 
-/** 文本元素的透明热区：选中/拖拽/缩放/旋转/双击编辑 */
-function TextHit({ el, scale, selected, onSelect, onEdit, onChange, onSyncDom }: {
+/** 文本元素的透明热区 Rect：选中/拖拽/缩放/旋转/双击编辑。
+ *  Transformer 由 hit 层在所有热区 Rect 之后统一渲染（见 DesignerCanvas），
+ *  否则高 zIndex 文本的热区命中像素会盖住低 zIndex 选中文本的变换锚点。 */
+function TextHit({ el, scale, onSelect, onEdit, onChange, onSyncDom, registerNode }: {
   el: TextEl
   scale: number
-  selected: boolean
   onSelect: () => void
   onEdit: () => void
   onChange: (patch: Partial<Pick<TemplateElement, 'x' | 'y' | 'w' | 'h' | 'rotation'>>) => void
   onSyncDom: (el: TemplateElement, node: Konva.Node) => void
+  registerNode: (id: string, node: Konva.Rect | null) => void
 }): JSX.Element {
   const rectRef = useRef<Konva.Rect>(null)
+  useEffect(() => {
+    registerNode(el.id, rectRef.current)
+    return () => registerNode(el.id, null)
+  }, [el.id, registerNode])
+  return (
+    <Rect
+      ref={rectRef}
+      id={el.id}
+      x={MM(el.x, scale)}
+      y={MM(el.y, scale)}
+      width={MM(el.w, scale)}
+      height={MM(el.h, scale)}
+      rotation={el.rotation}
+      draggable={!el.locked}
+      fill="transparent"
+      onClick={onSelect}
+      onTap={onSelect}
+      onDblClick={onEdit}
+      onDragMove={(e) => onSyncDom(el, e.target)}
+      onTransform={(e) => onSyncDom(el, e.target)}
+      onTransformEnd={(e) => {
+        const node = e.target
+        onChange({
+          x: node.x() / mmToPxAt96(1) / scale,
+          y: node.y() / mmToPxAt96(1) / scale,
+          w: Math.max(1, node.width() * node.scaleX() / mmToPxAt96(1) / scale),
+          h: Math.max(1, node.height() * node.scaleY() / mmToPxAt96(1) / scale),
+          rotation: Math.round(node.rotation() * 10) / 10
+        })
+        node.scaleX(1); node.scaleY(1)
+      }}
+    />
+  )
+}
+
+/** 统一在层内所有节点之后渲染的 Transformer：保证锚点命中像素不被同层其他元素覆盖 */
+function NodeTransformer({ node, keepRatio, enabledAnchors }: {
+  node: Konva.Node
+  keepRatio?: boolean
+  enabledAnchors?: string[]
+}): JSX.Element {
   const trRef = useRef<Konva.Transformer>(null)
   useEffect(() => {
-    if (selected && rectRef.current && trRef.current) {
-      trRef.current.nodes([rectRef.current])
+    if (trRef.current) {
+      trRef.current.nodes([node])
       trRef.current.getLayer()?.batchDraw()
     }
-  }, [selected])
+  }, [node])
   return (
-    <>
-      <Rect
-        ref={rectRef}
-        id={el.id}
-        x={MM(el.x, scale)}
-        y={MM(el.y, scale)}
-        width={MM(el.w, scale)}
-        height={MM(el.h, scale)}
-        rotation={el.rotation}
-        draggable={!el.locked}
-        fill="transparent"
-        onClick={onSelect}
-        onTap={onSelect}
-        onDblClick={onEdit}
-        onDragMove={(e) => onSyncDom(el, e.target)}
-        onTransform={(e) => onSyncDom(el, e.target)}
-        onTransformEnd={(e) => {
-          const node = e.target
-          onChange({
-            x: node.x() / mmToPxAt96(1) / scale,
-            y: node.y() / mmToPxAt96(1) / scale,
-            w: Math.max(1, node.width() * node.scaleX() / mmToPxAt96(1) / scale),
-            h: Math.max(1, node.height() * node.scaleY() / mmToPxAt96(1) / scale),
-            rotation: Math.round(node.rotation() * 10) / 10
-          })
-          node.scaleX(1); node.scaleY(1)
-        }}
-      />
-      {selected && (
-        <Transformer ref={trRef}
-          boundBoxFunc={(oldBox, newBox) =>
-            newBox.width < 4 || newBox.height < 4 ? oldBox : newBox} />
-      )}
-    </>
+    <Transformer ref={trRef}
+      keepRatio={keepRatio}
+      enabledAnchors={enabledAnchors}
+      boundBoxFunc={(oldBox, newBox) =>
+        newBox.width < 4 || newBox.height < 4 ? oldBox : newBox} />
   )
 }
 
@@ -281,9 +284,9 @@ export function DesignerCanvas(): JSX.Element {
   const selectedId = useDesignerStore((s) => s.selectedId)
   const select = useDesignerStore((s) => s.select)
   const updateGeometry = useDesignerStore((s) => s.updateGeometry)
-  const updateProps = useDesignerStore((s) => s.updateProps)
   const commit = useDesignerStore((s) => s.commit)
   const removeElement = useDesignerStore((s) => s.removeElement)
+  const requestTextEdit = useDesignerStore((s) => s.requestTextEdit)
   const [scale, setScale] = useState(1)
   const [assetUrls, setAssetUrls] = useState<Record<string, string>>({})
   const [gridOn, setGridOn] = useState(() => localStorage.getItem('tp-grid') === '1')
@@ -311,6 +314,8 @@ export function DesignerCanvas(): JSX.Element {
   const bgLayerRef = useRef<Konva.Layer>(null)
   // Portal 目标：Konva Stage 的 content div（canvas 的同级容器，文本 div 注入其中参与 z-index 排序）
   const stageRef = useRef<Konva.Stage>(null)
+  // 画布外层容器（tabIndex=0）：点击画布时聚焦它以承接 Delete/Backspace
+  const outerRef = useRef<HTMLDivElement>(null)
   const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null)
   // 文本 DOM 节点引用：拖拽/变换时命令式同步位置，避免每帧 React 重渲染
   const textDomRefs = useRef(new Map<string, HTMLDivElement>())
@@ -318,7 +323,17 @@ export function DesignerCanvas(): JSX.Element {
     if (node) textDomRefs.current.set(id, node)
     else textDomRefs.current.delete(id)
   }
-
+  // Konva 节点注册表：Transformer 在各层所有节点之后单独渲染时按 id 取挂载目标
+  const shapeNodeRefs = useRef(new Map<string, Konva.Node>())
+  const registerShapeNode = useCallback((id: string, node: Konva.Node | null): void => {
+    if (node) shapeNodeRefs.current.set(id, node)
+    else shapeNodeRefs.current.delete(id)
+  }, [])
+  const hitNodeRefs = useRef(new Map<string, Konva.Rect>())
+  const registerHitNode = useCallback((id: string, node: Konva.Rect | null): void => {
+    if (node) hitNodeRefs.current.set(id, node)
+    else hitNodeRefs.current.delete(id)
+  }, [])
   const gridLines = useMemo(() => {
     if (!gridOn) return null
     const lines: JSX.Element[] = []
@@ -347,6 +362,15 @@ export function DesignerCanvas(): JSX.Element {
       layer.cache()
     }
   }, [pw, ph, scale, gridOn])
+
+  // Konva v9 从不同步 Layer 的 canvas style.zIndex（Node.setZIndex 只重排内部数组，
+  // 且越界值直接忽略），层叠完全由 canvas 在 content 中的 DOM 顺序决定；而 portal 文本
+  // div 的插入时机（mutation）早于 canvas 挂载（layout effect），无法依赖节点顺序与
+  // canvas 交错。这里直接写 canvas DOM 的 z-index，与文本段 div（seg.index*2+3）严格交错。
+  const setLayerDomZ = (l: Konva.Layer | null, z: number): void => {
+    const cv = l?.canvas?._canvas
+    if (cv) cv.style.zIndex = String(z)
+  }
 
   // Stage mount 后取 content 节点用于 portal
   useEffect(() => {
@@ -395,13 +419,13 @@ export function DesignerCanvas(): JSX.Element {
     setGuides({ v: [], h: [] })
   }
 
+  // 双击文本：选中元素并让右侧属性面板的文本输入框聚焦（光标到末尾），不弹任何窗口
   function editText(el: TextEl): void {
-    const v = window.prompt('编辑文本', el.props.text)
-    if (v !== null) updateProps(el.id, { text: v })
+    requestTextEdit(el.id)
   }
 
   return (
-    <div tabIndex={0}
+    <div ref={outerRef} tabIndex={0}
       onKeyDown={(e) => {
         if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
           removeElement(selectedId); commit()
@@ -422,36 +446,54 @@ export function DesignerCanvas(): JSX.Element {
         </label>
       </div>
       <Stage ref={stageRef} width={Math.max(pw + 80, 400)} height={Math.max(ph + 80, 400)}
-        onMouseDown={(e) => { if (e.target === e.target.getStage()) select(null) }}>
+        onMouseDown={(e) => {
+          // 点击画布即把焦点收到画布容器，保证 Delete/Backspace 快捷键生效
+          // （双击文本时随后属性面板 textarea 会再取走焦点）
+          outerRef.current?.focus({ preventScroll: true })
+          if (e.target === e.target.getStage()) select(null)
+        }}>
         {/* 背景层：纸张 + 边框 + 网格，缓存为位图避免大纸张网格拖拽时重绘（z-index 最底） */}
-        <Layer ref={(l) => { if (l) l.zIndex(0) }} offsetX={-ORIGIN} offsetY={-ORIGIN}>
+        <Layer ref={(l) => setLayerDomZ(l, 0)} offsetX={-ORIGIN} offsetY={-ORIGIN}>
           <Rect x={-1} y={-1} width={pw + 2} height={ph + 2}
             stroke="#444" strokeWidth={2} fill="transparent" listening={false} />
-          <Rect x={0} y={0} width={pw} height={ph} fill="#ffffff" shadowBlur={6} shadowOpacity={0.2} />
+          {/* 白纸不参与命中：点击纸张空白处应落到 Stage 以取消选中 */}
+          <Rect x={0} y={0} width={pw} height={ph} fill="#ffffff" shadowBlur={6} shadowOpacity={0.2} listening={false} />
           {gridLines}
         </Layer>
-        {/* 图形段：连续的非文本元素归一段 Layer；z-index 与文本 DOM 层交错（段 index*2+2） */}
+        {/* 图形段：连续的非文本元素归一段 Layer；z-index 与文本 DOM 层交错（段 index*2+2）。
+            节点先全部绘制，Transformer 最后绘制——锚点命中像素不被同层其他元素覆盖 */}
         {segs.filter((s) => s.kind === 'shapes').map((seg) => (
           <Layer key={`shapes-${seg.index}`} offsetX={-ORIGIN} offsetY={-ORIGIN}
-            ref={(l) => { if (l) l.zIndex(seg.index * 2 + 2) }}>
+            ref={(l) => setLayerDomZ(l, seg.index * 2 + 2)}>
             {seg.els.map((el) => (
-              <NonTextShape key={el.id} el={el} scale={scale} selected={el.id === selectedId}
+              <NonTextShape key={el.id} el={el} scale={scale}
                 onSelect={() => select(el.id)}
                 onChange={(patch) => updateGeometry(el.id, patch)}
                 assetUrls={assetUrls}
                 onDragMove={handleDragMove}
-                onDragEnd={handleDragEnd} />
+                onDragEnd={handleDragEnd}
+                registerNode={registerShapeNode} />
+            ))}
+            {seg.els.filter((el) => el.id === selectedId).map((el) => (
+              <NodeTransformer key={`tr-${el.id}`} node={shapeNodeRefs.current.get(el.id) as Konva.Node}
+                enabledAnchors={isGroupWrapped(el) ? [] : undefined} />
             ))}
           </Layer>
         ))}
-        {/* 文本热区层：透明 Rect 承担交互，空白处自动穿透到下层图形 canvas */}
-        <Layer ref={(l) => { if (l) l.zIndex(9999) }} offsetX={-ORIGIN} offsetY={-ORIGIN}>
+        {/* 文本热区层：透明 Rect 承担交互，空白处自动穿透到下层图形 canvas。
+            热区先全部绘制，选中元素的 Transformer 最后绘制 */}
+        <Layer ref={(l) => setLayerDomZ(l, 9999)} offsetX={-ORIGIN} offsetY={-ORIGIN}>
           {textEls.map((el) => (
-            <TextHit key={el.id} el={el} scale={scale} selected={el.id === selectedId}
+            <TextHit key={el.id} el={el} scale={scale}
               onSelect={() => select(el.id)}
               onEdit={() => editText(el)}
               onChange={(patch) => updateGeometry(el.id, patch)}
-              onSyncDom={syncTextDom} />
+              onSyncDom={syncTextDom}
+              registerNode={registerHitNode} />
+          ))}
+          {textEls.filter((el) => el.id === selectedId).map((el) => (
+            // 文本框宽高独立可调（文本随框回流），关闭 Konva v9 默认开启的等比缩放
+            <NodeTransformer key={`tr-${el.id}`} node={hitNodeRefs.current.get(el.id) as Konva.Node} keepRatio={false} />
           ))}
           {guides.v.map((gx) => (
             <Line key={`av${gx}`} listening={false}
@@ -467,7 +509,7 @@ export function DesignerCanvas(): JSX.Element {
       {contentEl && createPortal(
         segs.filter((s) => s.kind === 'texts').map((seg) => (
           <div key={`texts-${seg.index}`}
-            style={{ position: 'absolute', inset: 0, zIndex: seg.index * 2 + 3, overflow: 'hidden' }}>
+            style={{ position: 'absolute', inset: 0, zIndex: seg.index * 2 + 3, overflow: 'hidden', pointerEvents: 'none' }}>
             {(seg.els as TextEl[]).map((el) => (
               <TextDom key={el.id} el={el} scale={scale} registerRef={registerTextRef} />
             ))}

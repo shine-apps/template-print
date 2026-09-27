@@ -1,5 +1,6 @@
 import { Button, ColorPicker, InputNumber, Input, Select, Segmented, Space, Switch, Divider } from 'antd'
-import { useEffect, useState, type CSSProperties } from 'react'
+import type { TextAreaRef } from 'antd/es/input/TextArea'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useDesignerStore } from '../store/designer-store'
 import { mmToPt, ptToMm } from '../../../shared/units'
 import { ParamManager } from './param-manager'
@@ -14,7 +15,18 @@ export function PropertyPanel({ onCommitted }: { onCommitted: () => void }): JSX
   const el = doc.content.elements.find((e) => e.id === selectedId)
 
   const [fonts, setFonts] = useState<FontListDto | null>(null)
+  // 双击画布文本时递增：聚焦本面板文本框并把光标定位到末尾（聚焦边框为 antd 默认蓝色高亮）
+  const textEditNonce = useDesignerStore((s) => s.textEditNonce)
+  const textAreaRef = useRef<TextAreaRef>(null)
   useEffect(() => { void getFonts().then(setFonts) }, [])
+  useEffect(() => {
+    if (textEditNonce === 0 || !el || el.type !== 'text') return
+    const node = textAreaRef.current?.resizableTextArea?.textArea
+    if (!node) return
+    const len = el.props.text.length
+    node.focus()
+    node.setSelectionRange(len, len)
+  }, [textEditNonce, el])
 
   function geo(patch: Partial<{ x: number; y: number; w: number; h: number; locked: boolean; rotation: number }>): void {
     if (el) { updateGeometry(el.id, patch); onCommitted() }
@@ -66,7 +78,8 @@ export function PropertyPanel({ onCommitted }: { onCommitted: () => void }): JSX
                 <Segmented size="small" block value={tp.direction}
                   options={[{ value: 'horizontal', label: '横排' }, { value: 'vertical', label: '竖排' }]}
                   onChange={(v) => props({ direction: v as 'horizontal' | 'vertical' })} />
-                <Input.TextArea rows={2} value={tp.text} onChange={(e) => props({ text: e.target.value })} />
+                <Input.TextArea ref={textAreaRef} rows={2} value={tp.text}
+                  onChange={(e) => props({ text: e.target.value })} />
                 {doc.params.length > 0 && (
                   <Select size="small" style={{ width: '100%' }} placeholder="插入参数到文本末尾"
                     options={doc.params.map((p) => ({ value: p.name, label: `{{${p.name}}}` }))}

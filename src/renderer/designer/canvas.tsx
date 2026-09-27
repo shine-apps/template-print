@@ -195,7 +195,9 @@ function TextDom({ el, scale, registerRef }: {
     width: MM(el.w, scale),
     height: MM(el.h, scale),
     transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
-    transformOrigin: '50% 50%',
+    // 必须绕左上角旋转：Konva 节点的 (x,y) 即旋转原点（Transformer 旋转后改写 x/y
+    // 保持视觉中心不动）。若用默认的 50% 50%，文字会绕错误中心转、偏离文本框。
+    transformOrigin: '0 0',
     pointerEvents: 'none'
   }
   return (

@@ -99,7 +99,8 @@ function geoStyle(el: TemplateElement, extra?: CSSProperties): CSSProperties {
     width: `${el.w}mm`,
     height: `${el.h}mm`,
     boxSizing: 'border-box',
-    ...(el.rotation ? { transform: `rotate(${el.rotation}deg)` } : null),
+    // 绕左上角旋转，与设计器 Konva 的 (x,y) 旋转原点及打印 HTML 保持一致
+    ...(el.rotation ? { transform: `rotate(${el.rotation}deg)`, transformOrigin: '0 0' } : null),
     ...extra
   }
 }

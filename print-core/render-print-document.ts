@@ -23,6 +23,8 @@ function geoStyle(el: TemplateElement): string {
     `width:${el.w}mm`,
     `height:${el.h}mm`,
     el.rotation ? `transform:rotate(${el.rotation}deg)` : '',
+    // 绕左上角旋转：设计器 Konva 的 (x,y) 即旋转原点；CSS 默认 50% 50% 会导致旋转后偏移
+    el.rotation ? 'transform-origin:0 0' : '',
     'position:absolute',
     'box-sizing:border-box'
   ]

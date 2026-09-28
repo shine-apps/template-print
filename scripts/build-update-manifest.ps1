@@ -1,9 +1,13 @@
 # Generate latest.json for a built MSI setup file.
-# Usage: powershell -ExecutionPolicy Bypass -File ./scripts/build-update-manifest.ps1 [-SetupPath <file>] [-OutDir <dir>] [-NotesFile <file>]
+# Usage: powershell -ExecutionPolicy Bypass -File ./scripts/build-update-manifest.ps1 [-SetupPath <file>] [-OutDir <dir>] [-NotesFile <file>] [-AssetBaseUrl <url>]
+# -AssetBaseUrl: base URL the installer is served from (e.g. a domestic mirror).
+# When given, the manifest "url" becomes an absolute URL; otherwise it stays a
+# file name relative to the update base URL (GitHub Release).
 param(
   [string]$SetupPath = '',
   [string]$OutDir = '',
-  [string]$NotesFile = ''
+  [string]$NotesFile = '',
+  [string]$AssetBaseUrl = ''
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path (Split-Path $MyInvocation.MyCommand.Path -Parent) -Parent
@@ -23,11 +27,13 @@ if ($NotesFile -and (Test-Path $NotesFile)) { $notes = (Get-Content $NotesFile -
 $fi = Get-Item $SetupPath
 $size = $fi.Length
 $hash = (Get-FileHash -Algorithm SHA256 -Path $SetupPath).Hash.ToLower()
+$url = $fi.Name
+if ($AssetBaseUrl) { $url = $AssetBaseUrl.TrimEnd('/') + '/' + $fi.Name }
 $obj = [ordered]@{
   version      = $version
   releaseDate  = (Get-Date).ToString('yyyy-MM-dd')
   releaseNotes = $notes
-  url          = $fi.Name
+  url          = $url
   size         = $size
   sha256       = $hash
 }
@@ -37,3 +43,4 @@ $out = Join-Path $OutDir 'latest.json'
 [System.IO.File]::WriteAllText($out, $json, (New-Object System.Text.UTF8Encoding($false)))
 Write-Host ('wrote ' + $out)
 Write-Host ('version=' + $version + ' size=' + $size)
+Write-Host ('url=' + $url)

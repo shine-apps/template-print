@@ -12,7 +12,7 @@ import {
   type InstallState,
   type InstallFailedPayload
 } from '../../../shared/update-manifest'
-import { UPDATE_BASE_URL } from '../../../shared/update-config'
+import { UPDATE_BASE_URLS, updateRequestHeaders } from '../../../shared/update-config'
 import {
   streamDownload,
   DownloadCanceled,
@@ -34,7 +34,8 @@ export interface UpdateServiceDeps {
   dataDir: string
   currentVersion: string
   isPackaged: boolean
-  baseUrl: string
+  /** 候选更新源，按优先级排列；check() 依次尝试，下载按命中的源解析相对地址 */
+  baseUrls: string[]
   requestFn: DownloadRequestFn
   /** undefined=用内置 electron net 拉 JSON */
   httpGetText?: HttpGetText
@@ -51,6 +52,7 @@ async function netGetText(url: string, timeoutMs: number): Promise<string> {
   const { net } = await import('electron')
   return new Promise((resolve, reject) => {
     const req = net.request(url)
+    for (const [name, value] of Object.entries(updateRequestHeaders())) req.setHeader(name, value)
     const chunks: Buffer[] = []
     const timer = setTimeout(() => req.abort(), timeoutMs)
     req.on('response', (res) => {
@@ -72,6 +74,8 @@ async function netGetText(url: string, timeoutMs: number): Promise<string> {
 export class UpdateService {
   private listeners = new Map<UpdateChannel, Set<Listener>>()
   private latest: UpdateManifest | null = null
+  /** 命中清单的更新源，用于解析清单里的相对安装包地址 */
+  private latestBase = ''
   private abort: AbortController | null = null
   private readyFile: string | null = null
   private readonly updatesDir: string
@@ -90,7 +94,7 @@ export class UpdateService {
       dataDir,
       currentVersion: app.getVersion(),
       isPackaged: app.isPackaged,
-      baseUrl: UPDATE_BASE_URL,
+      baseUrls: [...UPDATE_BASE_URLS],
       requestFn: electronNetRequest,
       now: () => Date.now(),
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
@@ -131,16 +135,25 @@ export class UpdateService {
   }
 
   async check(manual: boolean): Promise<void> {
-    let manifest: UpdateManifest
-    try {
-      const getText = this.deps.httpGetText ?? netGetText
-      const text = await getText(resolveDownloadUrl(this.deps.baseUrl, 'latest.json'), 8000)
-      manifest = UpdateManifestSchema.parse(JSON.parse(text))
-    } catch (e) {
-      const msg = (e as Error).message ?? ''
-      const reason = e instanceof SyntaxError || /expected|invalid|zod|unexpected/i.test(msg)
-        ? 'bad-manifest'
-        : 'net-error'
+    const getText = this.deps.httpGetText ?? netGetText
+    let manifest: UpdateManifest | null = null
+    let source = ''
+    // 依次尝试候选源（国内镜像优先，失败回退 GitHub）：首个能拿到合法清单的源胜出
+    let reason = 'net-error'
+    for (const base of this.deps.baseUrls) {
+      try {
+        const text = await getText(resolveDownloadUrl(base, 'latest.json'), 8000)
+        manifest = UpdateManifestSchema.parse(JSON.parse(text))
+        source = base
+        break
+      } catch (e) {
+        const msg = (e as Error).message ?? ''
+        reason = e instanceof SyntaxError || /expected|invalid|zod|unexpected/i.test(msg)
+          ? 'bad-manifest'
+          : 'net-error'
+      }
+    }
+    if (!manifest) {
       if (manual) this.emit('update:checkResult', { hasUpdate: false, manual, reason } satisfies CheckResultPayload)
       return
     }
@@ -154,6 +167,7 @@ export class UpdateService {
     }
     if (!manual && s.skippedUpdateVersion === manifest.version) return
     this.latest = manifest
+    this.latestBase = source
     this.emit('update:checkResult', { hasUpdate: true, manual, manifest } satisfies CheckResultPayload)
   }
 
@@ -187,7 +201,7 @@ export class UpdateService {
     this.abort = new AbortController()
     try {
       await streamDownload({
-        url: resolveDownloadUrl(this.deps.baseUrl, m.url),
+        url: resolveDownloadUrl(this.latestBase || this.deps.baseUrls[0], m.url),
         partPath: part,
         finalPath: final,
         expectedSize: m.size,

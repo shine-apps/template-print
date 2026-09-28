@@ -67,7 +67,7 @@ async function startFileServer(template: Record<string, unknown> = manifest): Pr
   return { server, base: `http://127.0.0.1:${port}/` }
 }
 
-function makeSvc(base: string, opts?: { version?: string }): {
+function makeSvc(base: string | string[], opts?: { version?: string }): {
   svc: UpdateService
   events: { channel: string; payload: unknown }[]
 } {
@@ -76,7 +76,7 @@ function makeSvc(base: string, opts?: { version?: string }): {
     dataDir: dir,
     currentVersion: opts?.version ?? '0.1.0',
     isPackaged: false,
-    baseUrl: base,
+    baseUrls: Array.isArray(base) ? base : [base],
     requestFn: nodeHttpRequest as DownloadRequestFn,
     httpGetText: nodeGetText,
     now: () => Date.now(),
@@ -135,6 +135,34 @@ describe('UpdateService.check', () => {
     await svc.check(true)
     expect((events.at(-1)!.payload as CheckResultPayload).reason).toBe('bad-manifest')
     server.close()
+  })
+
+  it('首选源不可用 → 回退备用源；下载按命中源解析相对地址', async () => {
+    const dead = createServer((_req, res) => { res.statusCode = 500; res.end('nope') })
+    await new Promise<void>((r) => dead.listen(0, '127.0.0.1', r))
+    const deadBase = `http://127.0.0.1:${(dead.address() as AddressInfo).port}/`
+    const { server, base } = await startFileServer()
+    const { svc, events } = makeSvc([deadBase, base])
+    await svc.check(false)
+    expect(events.map((e) => e.payload as CheckResultPayload).some((p) => p.hasUpdate)).toBe(true)
+    // 相对地址 setup.exe 必须解析到命中的备用源，否则下载会打向 deadBase
+    await svc.download()
+    const phases = events
+      .filter((e) => e.channel === 'update:progress')
+      .map((e) => (e.payload as UpdateProgressPayload).phase)
+    expect(phases.at(-1)).toBe('ready')
+    dead.close()
+    server.close()
+  })
+
+  it('所有源都不可用 → 手动检查给 net-error', async () => {
+    const dead = createServer((_req, res) => { res.statusCode = 500; res.end('nope') })
+    await new Promise<void>((r) => dead.listen(0, '127.0.0.1', r))
+    const deadBase = `http://127.0.0.1:${(dead.address() as AddressInfo).port}/`
+    const { svc, events } = makeSvc([deadBase, 'http://127.0.0.1:1/'])
+    await svc.check(true)
+    expect((events.at(-1)!.payload as CheckResultPayload).reason).toBe('net-error')
+    dead.close()
   })
 
   it('检查时间戳被记录到 settings', async () => {
@@ -244,7 +272,7 @@ describe('UpdateService 安装状态与自动检查节流', () => {
       dataDir: join(dir, 'pkg'),
       currentVersion: '0.1.0',
       isPackaged: true,
-      baseUrl: 'http://x/',
+      baseUrls: ['http://x/'],
       requestFn: nodeHttpRequest,
       httpGetText: nodeGetText,
       now: () => t,

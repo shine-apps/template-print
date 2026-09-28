@@ -30,7 +30,7 @@ Release 资产（Setup exe + latest.json）即客户端自动更新源，无需�
    git push origin v0.2.0
    ```
 
-   Release 流水线（windows-latest）会自动：版本校验 → 测试 → electron-vite build → electron-builder 打 NSIS 包 → 抽取发布说明 → 计算 size/SHA256 生成 latest.json → 创建/更新 GitHub Release。
+   Release 流水线（windows-latest）会自动：版本校验 → 测试 → electron-vite build → electron-builder 打 NSIS/MSI 包 → 抽取发布说明 → 计算 size/SHA256 生成 latest.json → 创建/更新 GitHub Release。
 
 5. **验证发布**
    - Release 页面出现 `v0.2.0`，含 `TemplatePrint-0.2.0-Setup-x64.exe` 与 `latest.json`：
@@ -48,12 +48,18 @@ action-gh-release 会以当前提交创建对应 tag 与 Release。日常发版�
 - 同一 tag 重跑 Release workflow：Release 与资产幂等覆盖。
 - 安装包内容有变化时务必重新核对 latest.json 中的 sha256（CI 自动重算）。
 
-## 四、更新源地址（已内置，无需配置）
+## 四、更新源地址
 
-- 清单：`https://github.com/shine-apps/template-print/releases/latest/download/latest.json`
-- 安装包：`https://github.com/shine-apps/template-print/releases/latest/download/TemplatePrint-<version>-Setup-x64.exe`
+客户端按优先级依次尝试候选源（`shared/update-config.ts` 的 `UPDATE_BASE_URLS`），首个能拿到合法 `latest.json` 的源胜出：
 
-本地开发走查时可用环境变量覆盖（仅 dev 构建生效）：`TP_UPDATE_BASE_URL=http://127.0.0.1:8765/`，
+1. 国内对象存储镜像（腾讯云 COS）——国内直连快；
+2. GitHub Releases 的 latest 稳定地址——兜底。
+
+> 注意：发布流水线目前只向 GitHub Release 发布安装包与清单，**不再自动上传 COS**；国内下载加速方案待定。在此期间 COS 源上不会有新版本资产，客户端检查更新时会自动回退到 GitHub，更新功能不受影响。
+
+清单里的 `url` 字段可以是相对路径（相对命中的源基址解析）或绝对 http(s) 地址；当前流水线生成相对文件名。
+
+本地开发走查时可用环境变量覆盖（仅 dev 构建生效，覆盖后只走该源）：`TP_UPDATE_BASE_URL=http://127.0.0.1:8765/`，
 配合 `scripts/serve-update.ps1` 提供本地 Range 静态服务器。
 
 ## 五、注意事项

@@ -50,13 +50,14 @@ jobs:
           COS_BUCKET: ${{ secrets.COS_BUCKET }}
           COS_REGION: ${{ secrets.COS_REGION }}
         run: |
+          # Keep run blocks pure ASCII: PowerShell 5.1 misparses BOM-less UTF-8 scripts.
           $referer = 'https://dl.templateprint.app/'
           $url = 'https://' + $env:COS_BUCKET + '.cos.' + $env:COS_REGION + '.myqcloud.com/_cos-check.txt'
 
           function Get-Status {
-            param([string]$Uri, [string]$Referer, [switch]$Range)
+            param([string]$Uri, [string]$Ref, [switch]$Range)
             $req = [System.Net.HttpWebRequest]::Create($Uri)
-            if ($Referer) { $req.Referer = $Referer }
+            if ($Ref) { $req.Referer = $Ref }
             if ($Range) { [void]$req.AddRange(0, 9) }
             try {
               $resp = $req.GetResponse()
@@ -71,28 +72,28 @@ jobs:
           }
 
           $plain = Get-Status -Uri $url
-          $signed = Get-Status -Uri $url -Referer $referer
+          $withRef = Get-Status -Uri $url -Ref $referer
           $ranged = Get-Status -Uri $url -Range
 
           Write-Host ''
           Write-Host ('object URL          : ' + $url)
           Write-Host ('anonymous GET       : ' + $plain.Status + ' (content-length=' + $plain.Length + ')')
-          Write-Host ('GET with Referer    : ' + $signed.Status)
+          Write-Host ('GET with Referer    : ' + $withRef.Status)
           Write-Host ('anonymous Range 0-9 : ' + $ranged.Status + ' ' + $ranged.ContentRange)
           Write-Host ''
 
-          if ($signed.Status -ne 200) {
-            throw 'FAIL: 带 Referer 的下载也被拒绝 -> 桶权限或对象 ACL 有误（客户端会下载失败）'
+          if ($withRef.Status -ne 200) {
+            throw 'FAIL: download with Referer was rejected -> check bucket permission / object ACL'
           }
           if ($plain.Status -eq 200) {
-            Write-Host 'RESULT: 匿名可下载 —— 防盗链未开启（当前任何拿到链接的人都能下）'
+            Write-Host 'RESULT: anonymous download allowed -> hotlink protection is OFF'
           } elseif ($plain.Status -eq 403) {
-            Write-Host 'RESULT: 匿名 403、带 Referer 200 —— 防盗链已生效，只有本程序能下载（预期终态）'
+            Write-Host 'RESULT: anonymous 403, with Referer 200 -> hotlink protection active, only this app can download'
           } else {
-            throw ('FAIL: 匿名请求返回了意外状态码 ' + $plain.Status)
+            throw ('FAIL: unexpected anonymous status ' + $plain.Status)
           }
-          if ($ranged.Status -eq 200) {
-            Write-Host 'NOTE: Range 未生效（返回 200），客户端断点续传会退化为全量重下（功能可用，仅浪费带宽）'
-          } elseif ($ranged.Status -eq 206) {
-            Write-Host 'NOTE: Range 正常（206），断点续传可用'
+          if ($ranged.Status -eq 206) {
+            Write-Host 'NOTE: Range supported (206) -> resumable download works'
+          } elseif ($ranged.Status -eq 200) {
+            Write-Host 'NOTE: Range ignored (200) -> resumable download falls back to full re-download'
           }

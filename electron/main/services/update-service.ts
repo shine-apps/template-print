@@ -99,8 +99,11 @@ export class UpdateService {
       now: () => Date.now(),
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       quit: () => app.quit(),
-      spawnGuardian: (scriptPath) => {
-        spawn('powershell.exe', ['-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptPath], {
+      spawnGuardian: (launcherCmd) => {
+        // spawn cmd.exe 而非直接 spawn powershell.exe：cmd 跑完 launch-guardian.cmd 会立即 exit，
+        // PowerShell 完全脱离 Electron 的进程树（包括 Windows Job Object 牵连），
+        // 即使父进程在 spawn 返回后立刻退出也不会被系统杀掉。
+        spawn('cmd.exe', ['/c', launcherCmd], {
           detached: true, stdio: 'ignore', windowsHide: true
         }).unref()
       }
@@ -268,11 +271,23 @@ export class UpdateService {
       from: params.fromVersion, to: params.toVersion, phase: 'installing', reason: null, ts: this.deps.now()
     }
     mkdirSync(this.updatesDir, { recursive: true })
-    writeFileSync(join(this.updatesDir, 'guardian.ps1'), buildGuardianScript(), 'ascii')
+    const ps1Path = join(this.updatesDir, 'guardian.ps1')
+    const cmdPath = join(this.updatesDir, 'launch-guardian.cmd')
+    writeFileSync(ps1Path, buildGuardianScript(), 'ascii')
+    // 3 行纯 ASCII .cmd：cd 到自身目录（%~dp0），相对路径调 guardian.ps1
+    // 好处：①路径里有中文（如"模板打印"）也不会被 ASCII 编码吃掉
+    //       ②cmd.exe 跑完立即 exit，PowerShell 完全脱离 Electron 进程树（含 Job Object 牵连）
+    writeFileSync(
+      cmdPath,
+      '@echo off\r\ncd /d "%~dp0"\r\npowershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "guardian.ps1"\r\nexit /b 0\r\n',
+      'ascii'
+    )
     writeFileSync(join(this.updatesDir, 'guardian-params.json'), JSON.stringify(params, null, 2), 'utf-8')
     writeFileSync(this.stateFile, JSON.stringify(state), 'utf-8')
-    this.deps.spawnGuardian(join(this.updatesDir, 'guardian.ps1'))
-    this.deps.quit()
+    this.deps.spawnGuardian(cmdPath)
+    // 给 cmd → PowerShell 足够时间完成进程创建：确保 PowerShell 已进入等待循环后父进程再退出，
+    // 避免 spawn 刚返回就 quit 导致 PowerShell 被系统杀掉（Job Object 牵连）
+    setTimeout(() => this.deps.quit(), 500)
   }
 
   /** 启动时读取上次安装结果：done→清理备份+通知；failed/滞留 installing→失败通知 */

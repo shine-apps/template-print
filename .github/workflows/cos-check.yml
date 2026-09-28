@@ -73,13 +73,15 @@ jobs:
 
           $plain = Get-Status -Uri $url
           $withRef = Get-Status -Uri $url -Ref $referer
-          $ranged = Get-Status -Uri $url -Range
+          $ranged = Get-Status -Uri $url -Ref $referer -Range
+          $manifest = Get-Status -Uri ('https://' + $env:COS_BUCKET + '.cos.' + $env:COS_REGION + '.myqcloud.com/latest.json') -Ref $referer
 
           Write-Host ''
-          Write-Host ('object URL          : ' + $url)
-          Write-Host ('anonymous GET       : ' + $plain.Status + ' (content-length=' + $plain.Length + ')')
-          Write-Host ('GET with Referer    : ' + $withRef.Status)
-          Write-Host ('anonymous Range 0-9 : ' + $ranged.Status + ' ' + $ranged.ContentRange)
+          Write-Host ('object URL           : ' + $url)
+          Write-Host ('anonymous GET        : ' + $plain.Status + ' (content-length=' + $plain.Length + ')')
+          Write-Host ('GET with Referer     : ' + $withRef.Status)
+          Write-Host ('Range 0-9 + Referer  : ' + $ranged.Status + ' ' + $ranged.ContentRange)
+          Write-Host ('latest.json + Referer: ' + $manifest.Status)
           Write-Host ''
 
           if ($withRef.Status -ne 200) {
@@ -93,7 +95,14 @@ jobs:
             throw ('FAIL: unexpected anonymous status ' + $plain.Status)
           }
           if ($ranged.Status -eq 206) {
-            Write-Host 'NOTE: Range supported (206) -> resumable download works'
+            Write-Host 'NOTE: Range supported -> resumable download works for the client'
           } elseif ($ranged.Status -eq 200) {
             Write-Host 'NOTE: Range ignored (200) -> resumable download falls back to full re-download'
+          } else {
+            throw ('FAIL: unexpected Range status ' + $ranged.Status)
+          }
+          if ($manifest.Status -eq 200) {
+            Write-Host 'NOTE: latest.json is present on the mirror (safe to point UPDATE_BASE_URLS at it)'
+          } else {
+            Write-Host 'NOTE: latest.json not on the mirror yet -> it gets uploaded by the next release run'
           }

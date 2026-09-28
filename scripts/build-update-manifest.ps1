@@ -1,8 +1,8 @@
 # Generate latest.json for a built setup file.
 # Usage: powershell -ExecutionPolicy Bypass -File ./scripts/build-update-manifest.ps1 [-SetupPath <file>] [-OutDir <dir>] [-NotesFile <file>] [-AssetBaseUrl <url>]
-# -AssetBaseUrl: base URL the installer is served from (e.g. the Tencent COS mirror).
+# -AssetBaseUrl: base URL the installer is served from (e.g. a domestic mirror).
 # When given, the manifest "url" becomes an absolute URL; otherwise it stays a
-# file name relative to UPDATE_BASE_URL (GitHub Release).
+# file name relative to the update base URL (GitHub Release).
 param(
   [string]$SetupPath = '',
   [string]$OutDir = '',

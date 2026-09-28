@@ -67,64 +67,10 @@ jobs:
       - name: Extract release notes for this version
         run: node scripts/release/prepare-notes.mjs $env:VERSION
 
-      # ---- Domestic mirror (Tencent COS): optional, enabled by repository secrets ----
-      # Configure COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION to have the
-      # installer and latest.json uploaded to COS, with the manifest "url" pointing at
-      # the COS direct link so clients download from inside mainland China.
-      - name: Detect COS mirror configuration
-        shell: powershell
-        env:
-          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
-        run: |
-          if ($env:COS_SECRET_ID) {
-            "COS_ENABLED=1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
-            Write-Host 'COS mirror enabled'
-          } else {
-            Write-Host 'COS mirror not configured; manifest will point at the GitHub Release'
-          }
-
-      - name: Upload installers to Tencent COS
-        id: cos_upload
-        # 跨境上传大文件可能失败（GitHub runner -> 国内 COS）；失败不阻断发版，
-        # 清单会自动退回 GitHub 直链（见下一个步骤），不会发布指向空地址的清单。
-        continue-on-error: true
-        if: env.COS_ENABLED == '1'
-        shell: powershell
-        env:
-          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
-          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
-          COS_BUCKET: ${{ secrets.COS_BUCKET }}
-          COS_REGION: ${{ secrets.COS_REGION }}
-        run: |
-          # 只镜像客户端真正会下载的文件（清单指向 msi）；exe 仍发布在 GitHub Release。
-          ./scripts/upload-to-cos.ps1 -Path "release/TemplatePrint-$env:VERSION-Setup-x64.msi"
-
       - name: Generate latest.json (size + sha256)
         shell: powershell
-        env:
-          COS_BUCKET: ${{ secrets.COS_BUCKET }}
-          COS_REGION: ${{ secrets.COS_REGION }}
         run: |
-          $setup = "release/TemplatePrint-$env:VERSION-Setup-x64.msi"
-          $mirrored = ($env:COS_ENABLED -eq '1') -and ('${{ steps.cos_upload.outcome }}' -eq 'success')
-          if ($mirrored) {
-            ./scripts/build-update-manifest.ps1 -SetupPath $setup -AssetBaseUrl "https://$env:COS_BUCKET.cos.$env:COS_REGION.myqcloud.com/"
-          } else {
-            if ($env:COS_ENABLED -eq '1') { Write-Host '::warning::COS mirror upload failed; manifest falls back to GitHub download URLs' }
-            ./scripts/build-update-manifest.ps1 -SetupPath $setup
-          }
-
-      - name: Upload latest.json to Tencent COS
-        continue-on-error: true
-        if: env.COS_ENABLED == '1' && steps.cos_upload.outcome == 'success'
-        shell: powershell
-        env:
-          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
-          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
-          COS_BUCKET: ${{ secrets.COS_BUCKET }}
-          COS_REGION: ${{ secrets.COS_REGION }}
-        run: |
-          ./scripts/upload-to-cos.ps1 -Path 'release/latest.json'
+          ./scripts/build-update-manifest.ps1 -SetupPath "release/TemplatePrint-$env:VERSION-Setup-x64.msi"
 
       - name: Create/update GitHub Release
         uses: softprops/action-gh-release@v2

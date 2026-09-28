@@ -1,6 +1,7 @@
 # Upload files to Tencent COS (XML API, v5 HMAC-SHA1 signature).
-# Pure PowerShell 5.1+, usable locally and on GitHub Actions runners.
-# Large files use COS multipart upload to avoid a single long-lived connection.
+# Pure PowerShell 5.1+, usable locally and on CI runners.
+# Every file is uploaded with a single PUT object request (COS simple upload
+# supports up to 5GB per object; intended for use from a domestic network).
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File ./scripts/upload-to-cos.ps1 `
@@ -21,10 +22,6 @@ param(
   [string]$KeyPrefix = '',
   [string]$Acl = 'public-read',
   [int]$ExpiresSeconds = 3600,
-  # Files larger than this use multipart upload.
-  [long]$MultipartThreshold = 52428800,  # 50MB
-  # COS requires every part except the last to be at least 1MB.
-  [long]$ChunkSize = 10485760,  # 10MB
   [int]$MaxRetries = 3,
   # Timeout for each HTTP request, not for the whole file.
   [int]$RequestTimeoutMs = 900000,  # 15 minutes
@@ -116,6 +113,24 @@ if ($SelfTest) {
   exit 0
 }
 
+# 4xx responses (bad request/auth/permission) never improve on retry, so fail fast
+# instead of re-sending a large file several times.
+function Test-PermanentHttpError {
+  param($ErrorRecord)
+  $resp = $null
+  if ($ErrorRecord.Exception -is [System.Net.WebException]) { $resp = $ErrorRecord.Exception.Response }
+  if ($null -ne $resp) {
+    $code = [int]$resp.StatusCode
+    if ($code -ge 400 -and $code -lt 500) {
+      $reader = New-Object System.IO.StreamReader($resp.GetResponseStream())
+      try { $detail = $reader.ReadToEnd() } finally { $reader.Dispose() }
+      if ($detail) { Write-Host ("  COS error response: " + $detail) }
+      return $true
+    }
+  }
+  return $false
+}
+
 function Invoke-WithRetry {
   param([scriptblock]$ScriptBlock, [int]$MaxAttempts = $MaxRetries, [string]$OperationName = 'Operation')
   $attempt = 0
@@ -127,6 +142,7 @@ function Invoke-WithRetry {
       return
     } catch {
       $errorMsg = $_.Exception.Message
+      if (Test-PermanentHttpError $_) { throw }
       $isTransient = $errorMsg -match '(timeout|canceled|aborted|connection|reset|disconnected|temporarily unavailable)' -or $_.Exception -is [System.Net.WebException]
       if ($isTransient -and $attempt -lt $MaxAttempts) {
         Write-Host "  [Attempt $attempt] Transient error: $errorMsg"
@@ -136,51 +152,10 @@ function Invoke-WithRetry {
   }
 }
 
-function New-CosUri([string]$HostName, [string]$EncodedPath, [System.Collections.IDictionary]$UrlParams) {
-  $query = (($UrlParams.Keys | Sort-Object | ForEach-Object {
-    (ConvertTo-CosUriEncode $_) + '=' + (ConvertTo-CosUriEncode ([string]$UrlParams[$_]))
-  }) -join '&')
-  if ($query) { return 'https://' + $HostName + $EncodedPath + '?' + $query }
-  return 'https://' + $HostName + $EncodedPath
-}
-
-function Get-CosResponseBody($Response) {
-  $reader = New-Object System.IO.StreamReader($Response.GetResponseStream())
-  try { return $reader.ReadToEnd() } finally { $reader.Dispose(); $Response.Close() }
-}
-
-function Invoke-CosXmlRequest {
-  param([string]$Method, [string]$Uri, [string]$EncodedPath, [System.Collections.IDictionary]$UrlParams,
-        [string]$HostName, [string]$Body, [string]$SecretId, [string]$SecretKey, [switch]$AclHeader)
-  $now = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-  $signTime = $now.ToString() + ';' + ($now + $ExpiresSeconds).ToString()
-  $signedHeaders = [ordered]@{ host = $HostName }
-  if ($AclHeader -and $Acl) { $signedHeaders['x-cos-acl'] = $Acl }
-  $authorization = New-CosAuthorization -Method $Method -UriPathname $EncodedPath -Headers $signedHeaders -UrlParams $UrlParams -SignTime $signTime -SecretId $SecretId -SecretKey $SecretKey
-  $req = [System.Net.HttpWebRequest]::Create($Uri)
-  $req.Method = $Method
-  $req.Timeout = $RequestTimeoutMs
-  $req.ReadWriteTimeout = $RequestTimeoutMs
-  $req.ServicePoint.Expect100Continue = $false
-  $req.ContentType = 'application/xml'
-  $req.Headers.Add('Authorization', $authorization)
-  if ($AclHeader -and $Acl) { $req.Headers.Add('x-cos-acl', $Acl) }
-  if ($Body) {
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
-    $req.ContentLength = $bytes.Length
-    $stream = $req.GetRequestStream()
-    try { $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Dispose() }
-  } else { $req.ContentLength = 0 }
-  $response = $req.GetResponse()
-  try {
-    $bodyText = Get-CosResponseBody $response
-    return @{ Body = $bodyText; ETag = $response.Headers['ETag']; Status = [int]$response.StatusCode }
-  } catch { $response.Close(); throw }
-}
-
 function Upload-FileDirect {
   param([string]$FilePath, [string]$EncodedPath, [string]$Uri, [string]$HostName, [string]$SecretId, [string]$SecretKey)
   $fi = Get-Item $FilePath
+  $total = [long]$fi.Length
   $now = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
   $signTime = $now.ToString() + ';' + ($now + $ExpiresSeconds).ToString()
   $signedHeaders = [ordered]@{ host = $HostName }
@@ -188,89 +163,61 @@ function Upload-FileDirect {
   $auth = New-CosAuthorization -Method 'put' -UriPathname $EncodedPath -Headers $signedHeaders -SignTime $signTime -SecretId $SecretId -SecretKey $SecretKey
   $req = [System.Net.HttpWebRequest]::Create($Uri)
   $req.Method = 'PUT'; $req.Timeout = $RequestTimeoutMs; $req.ReadWriteTimeout = $RequestTimeoutMs
-  $req.ServicePoint.Expect100Continue = $false; $req.AllowWriteStreamBuffering = $false; $req.ContentLength = $fi.Length
+  $req.ServicePoint.Expect100Continue = $false; $req.AllowWriteStreamBuffering = $false; $req.ContentLength = $total
   $req.Headers.Add('Authorization', $auth)
   if ($Acl) { $req.Headers.Add('x-cos-acl', $Acl) }
+  $activity = 'Uploading ' + $fi.Name
+  $showProgress = $total -ge 1MB
   $fs = [System.IO.File]::OpenRead($fi.FullName)
+  $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
   try {
     $stream = $req.GetRequestStream()
-    try { $fs.CopyTo($stream, 65536) } finally { $stream.Dispose() }
-  } finally { $fs.Dispose() }
-  $response = $req.GetResponse()
-  try { return @{ Status = [int]$response.StatusCode; Uri = $Uri } } finally { $response.Close() }
-}
-
-function Upload-Part {
-  param([string]$FilePath, [long]$Offset, [long]$Length, [int]$PartNumber, [string]$UploadId,
-        [string]$EncodedPath, [string]$HostName, [string]$SecretId, [string]$SecretKey)
-  $params = [ordered]@{ partNumber = $PartNumber.ToString(); uploadId = $UploadId }
-  $uri = New-CosUri $HostName $EncodedPath $params
-  $now = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); $signTime = $now.ToString() + ';' + ($now + $ExpiresSeconds).ToString()
-  $auth = New-CosAuthorization -Method 'put' -UriPathname $EncodedPath -Headers ([ordered]@{ host = $HostName }) -UrlParams $params -SignTime $signTime -SecretId $SecretId -SecretKey $SecretKey
-  $req = [System.Net.HttpWebRequest]::Create($uri); $req.Method = 'PUT'; $req.Timeout = $RequestTimeoutMs; $req.ReadWriteTimeout = $RequestTimeoutMs
-  $req.ServicePoint.Expect100Continue = $false; $req.AllowWriteStreamBuffering = $false; $req.ContentLength = $Length; $req.Headers.Add('Authorization', $auth)
-  $fs = [System.IO.File]::OpenRead($FilePath)
-  try {
-    $fs.Position = $Offset; $stream = $req.GetRequestStream()
     try {
-      $buffer = New-Object byte[] 1048576; $remaining = $Length
-      while ($remaining -gt 0) { $wanted = [int][Math]::Min($buffer.Length, $remaining); $read = $fs.Read($buffer, 0, $wanted); if ($read -le 0) { throw 'Unexpected end of file while reading multipart data' }; $stream.Write($buffer, 0, $read); $remaining -= $read }
-    } finally { $stream.Dispose() }
-  } finally { $fs.Dispose() }
-  $response = $req.GetResponse()
-  try { return [string]$response.Headers['ETag'] } finally { $response.Close() }
-}
-
-function Upload-FileMultipart {
-  param([string]$FilePath, [string]$EncodedPath, [string]$HostName, [string]$SecretId, [string]$SecretKey)
-  $initParams = [ordered]@{ uploads = '' }
-  $initUri = New-CosUri $HostName $EncodedPath $initParams
-  $init = Invoke-CosXmlRequest -Method 'POST' -Uri $initUri -EncodedPath $EncodedPath -UrlParams $initParams -HostName $HostName -Body '' -SecretId $SecretId -SecretKey $SecretKey -AclHeader
-  $uploadId = ([xml]$init.Body).InitiateMultipartUploadResult.UploadId
-  if (-not $uploadId) { throw ('COS did not return an UploadId: ' + $init.Body) }
-  Write-Host "  Multipart upload started: $uploadId"
-  $parts = New-Object System.Collections.ArrayList
-  $fi = Get-Item $FilePath
-  try {
-    $partNumber = 1; $offset = [long]0
-    while ($offset -lt $fi.Length) {
-      $length = [long][Math]::Min($ChunkSize, $fi.Length - $offset)
-      $n = $partNumber; $o = $offset; $l = $length
-      $etag = Invoke-WithRetry -OperationName "PUT part $n ($([Math]::Round($l / 1MB, 1)) MB)" {
-        Upload-Part -FilePath $fi.FullName -Offset $o -Length $l -PartNumber $n -UploadId $uploadId -EncodedPath $EncodedPath -HostName $HostName -SecretId $SecretId -SecretKey $SecretKey
+      if ($showProgress) {
+        # Manual copy loop with a progress bar (stream writes go straight to the network
+        # because AllowWriteStreamBuffering is false, so sent bytes track real progress).
+        $buffer = New-Object byte[] 262144  # 256 KB
+        [long]$sent = 0; $lastPct = -1
+        while (($read = $fs.Read($buffer, 0, $buffer.Length)) -gt 0) {
+          $stream.Write($buffer, 0, $read)
+          $sent += $read
+          $pct = [int][Math]::Floor($sent * 100 / $total)
+          if ($pct -ne $lastPct) {
+            $lastPct = $pct
+            $secs = $stopwatch.Elapsed.TotalSeconds
+            $speed = if ($secs -gt 0.05) { $sent / $secs / 1MB } else { 0 }
+            Write-Progress -Activity $activity -PercentComplete $pct -Status `
+              ($pct.ToString() + '%  ' + [Math]::Round($sent / 1MB, 1) + '/' + [Math]::Round($total / 1MB, 1) + ' MB  ' + [Math]::Round($speed, 2) + ' MB/s')
+          }
+        }
+      } else {
+        $fs.CopyTo($stream, 65536)
       }
-      if (-not $etag) { throw "COS returned no ETag for part $n" }
-      [void]$parts.Add(@{ Number = $n; ETag = $etag })
-      $offset += $length; $partNumber++
-    }
-    $xml = New-Object System.Text.StringBuilder
-    [void]$xml.Append('<CompleteMultipartUpload>')
-    foreach ($part in $parts) { [void]$xml.Append('<Part><PartNumber>'); [void]$xml.Append($part.Number); [void]$xml.Append('</PartNumber><ETag>'); [void]$xml.Append([System.Security.SecurityElement]::Escape($part.ETag)); [void]$xml.Append('</ETag></Part>') }
-    [void]$xml.Append('</CompleteMultipartUpload>')
-    $completeParams = [ordered]@{ uploadId = $uploadId }
-    $completeUri = New-CosUri $HostName $EncodedPath $completeParams
-    [void](Invoke-CosXmlRequest -Method 'POST' -Uri $completeUri -EncodedPath $EncodedPath -UrlParams $completeParams -HostName $HostName -Body $xml.ToString() -SecretId $SecretId -SecretKey $SecretKey)
-    Write-Host "  Multipart upload completed: $($parts.Count) parts"
-  } catch {
+    } finally { $stream.Dispose() }
+    $response = $req.GetResponse()
     try {
-      $abortParams = [ordered]@{ uploadId = $uploadId }; $abortUri = New-CosUri $HostName $EncodedPath $abortParams
-      [void](Invoke-CosXmlRequest -Method 'DELETE' -Uri $abortUri -EncodedPath $EncodedPath -UrlParams $abortParams -HostName $HostName -Body '' -SecretId $SecretId -SecretKey $SecretKey)
-      Write-Host '  Multipart upload aborted after failure'
-    } catch { Write-Host ('  Warning: failed to abort multipart upload: ' + $_.Exception.Message) }
-    throw
+      $status = [int]$response.StatusCode
+    } finally { $response.Close() }
+  } finally {
+    if ($showProgress) { Write-Progress -Activity $activity -Completed }
+    $stopwatch.Stop(); $fs.Dispose()
   }
+  if ($showProgress) {
+    $avg = if ($stopwatch.Elapsed.TotalSeconds -gt 0) { $total / $stopwatch.Elapsed.TotalSeconds / 1MB } else { 0 }
+    Write-Host ('  Sent ' + [Math]::Round($total / 1MB, 2) + ' MB in ' + [Math]::Round($stopwatch.Elapsed.TotalSeconds, 1) + 's (' + [Math]::Round($avg, 2) + ' MB/s)')
+  }
+  return @{ Status = $status; Uri = $Uri }
 }
 
 if (-not $Bucket) { throw 'Bucket is required (or set COS_BUCKET)' }
 if (-not $Region) { throw 'Region is required (or set COS_REGION)' }
 if ($Path.Count -eq 0) { throw 'Path is required' }
-if ($ChunkSize -lt 1048576) { throw 'ChunkSize must be at least 1MB for COS multipart upload' }
 $files = @()
 foreach ($p in $Path) { $items = @(Get-ChildItem -Path $p -File -ErrorAction SilentlyContinue); if ($items.Count -eq 0) { throw ('no file matches: ' + $p) }; $files += $items }
 $hostName = $Bucket + '.cos.' + $Region + '.myqcloud.com'
 $prefixSegments = @(); if ($KeyPrefix) { $prefixSegments = @($KeyPrefix.Trim('/') -split '/' | Where-Object { $_ }) }
 if ($DryRun) {
-  foreach ($fi in $files) { $segments = $prefixSegments + @($fi.Name); $ep = '/' + (($segments | ForEach-Object { ConvertTo-CosUriEncode $_ }) -join '/'); Write-Host ('would upload ' + $fi.Length + ' bytes -> https://' + $hostName + $ep + $(if ($fi.Length -gt $MultipartThreshold) { ' (multipart)' } else { '' })) }
+  foreach ($fi in $files) { $segments = $prefixSegments + @($fi.Name); $ep = '/' + (($segments | ForEach-Object { ConvertTo-CosUriEncode $_ }) -join '/'); Write-Host ('would upload ' + $fi.Length + ' bytes -> https://' + $hostName + $ep) }
   exit 0
 }
 if (-not $SecretId) { throw 'SecretId is required (or set COS_SECRET_ID)' }
@@ -280,11 +227,7 @@ foreach ($fi in $files) {
   $segments = $prefixSegments + @($fi.Name); $encodedPath = '/' + (($segments | ForEach-Object { ConvertTo-CosUriEncode $_ }) -join '/'); $uri = 'https://' + $hostName + $encodedPath
   Write-Host ''; Write-Host ("Uploading: " + $fi.Name + " (" + ($fi.Length / 1MB).ToString('F2') + " MB)")
   try {
-    if ($fi.Length -gt $MultipartThreshold) {
-      Invoke-WithRetry -OperationName "multipart upload $($fi.Name)" { Upload-FileMultipart -FilePath $fi.FullName -EncodedPath $encodedPath -HostName $hostName -SecretId $SecretId -SecretKey $SecretKey }
-    } else {
-      Invoke-WithRetry -OperationName "PUT $($fi.Name)" { [void](Upload-FileDirect -FilePath $fi.FullName -EncodedPath $encodedPath -Uri $uri -HostName $hostName -SecretId $SecretId -SecretKey $SecretKey) }
-    }
+    Invoke-WithRetry -OperationName "PUT $($fi.Name)" { [void](Upload-FileDirect -FilePath $fi.FullName -EncodedPath $encodedPath -Uri $uri -HostName $hostName -SecretId $SecretId -SecretKey $SecretKey) }
     $successCount++; Write-Host ('Success: ' + $fi.Name)
   } catch { Write-Host ('Failed after ' + $MaxRetries + ' attempts: ' + $_.Exception.Message); throw }
 }

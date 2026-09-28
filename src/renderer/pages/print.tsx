@@ -16,7 +16,6 @@ export function PrintPage(): JSX.Element {
   const nav = useNavigate()
 
   const [doc, setDoc] = useState<TemplateDocument | null>(null)
-  const [fromHistory, setFromHistory] = useState(false)
   const [printers, setPrinters] = useState<PrinterInfoDto[]>([])
   const [printerName, setPrinterName] = useState('')
   const [mode, setMode] = useState<'silent' | 'dialog'>('silent')
@@ -24,14 +23,10 @@ export function PrintPage(): JSX.Element {
   const [copies, setCopies] = useState(1)
   const [values, setValues] = useState<Record<string, string>>({})
   const [assetUrls, setAssetUrls] = useState<Record<string, string>>({})
-  const [saveOpen, setSaveOpen] = useState(false)
-  const [lastResult, setLastResult] = useState<{ working: TemplateDocument } | null>(null)
   const [paperHintOpen, setPaperHintOpen] = useState(false)
   const [paperHintCtx, setPaperHintCtx] = useState<{ key: string; w: number; h: number } | null>(null)
   const [confirmedPaperHints, setConfirmedPaperHints] = useState<string[]>([])
 
-  // 原始模板基线（用于 dirty 判定）；从调整版式返回时从草稿恢复
-  const baselineRef = useRef<string>('')
   // 已完成首次载入的路由 id。dev StrictMode 会把挂载 effect 重放一次，
   // 第一次执行已 clearDraft()，重放会误判“模板不存在”并跳回模板页，故同 id 仅执行一次
   const handledRef = useRef<{ id: string | undefined } | null>(null)
@@ -46,15 +41,11 @@ export function PrintPage(): JSX.Element {
       handledRef.current = { id }
       let loaded: TemplateDocument | null = null
       let restoredValues: Record<string, string> | null = null
-      let historyFlag = false
-      let baseline: string | null = null
 
       if (sessionDraft.doc) {
         // 从历史“重打”进入：用历史快照
         loaded = sessionDraft.doc
         restoredValues = sessionDraft.paramValues
-        historyFlag = sessionDraft.fromHistory
-        baseline = sessionDraft.baselineJson
         clearDraft()
       } else if (id) {
         loaded = await api.templates.get(id)
@@ -71,8 +62,6 @@ export function PrintPage(): JSX.Element {
       if (!loaded) { message.error('模板不存在'); nav('/templates'); return }
 
       setDoc(loaded)
-      setFromHistory(historyFlag)
-      baselineRef.current = baseline ?? JSON.stringify(loaded)
 
       const [prts, defPrinter] = await Promise.all([api.printers.list(), api.printers.getDefault()])
       setPrinters(prts)
@@ -199,14 +188,7 @@ export function PrintPage(): JSX.Element {
     else if (res.status === 'cancelled') message.info('已取消打印')
     else message.error(`打印失败：${res.errorMessage ?? '未知错误'}`)
 
-    // 来自真实模板（非历史重打）且版式相对基线有改动 → 弹保存决策
-    const changed = JSON.stringify(working) !== baselineRef.current
-    if (res.status === 'success' && !working.id.startsWith('__') && !fromHistory && changed) {
-      setLastResult({ working })
-      setSaveOpen(true)
-    } else {
-      nav('/history')
-    }
+    nav('/history')
   }
 
   async function confirmPaperHint(dontAsk: boolean): Promise<void> {
@@ -225,28 +207,6 @@ export function PrintPage(): JSX.Element {
     setPaperHintOpen(false)
     paperHintResolve.current?.(false)
     paperHintResolve.current = null
-  }
-
-  async function saveOverwrite(): Promise<void> {
-    if (!lastResult) return
-    await api.templates.save(lastResult.working)
-    message.success('改动已保存到原模板')
-    setSaveOpen(false)
-    nav('/history')
-  }
-
-  async function saveAsNew(): Promise<void> {
-    if (!lastResult) return
-    const w = lastResult.working
-    const created = await api.templates.create({
-      name: `${w.name}副本`,
-      widthMm: w.paper.widthMm,
-      heightMm: w.paper.heightMm
-    })
-    await api.templates.save({ ...w, id: created.id, createdAt: created.createdAt, isBuiltin: false })
-    message.success('已另存为新模板（图片需重新上传）')
-    setSaveOpen(false)
-    nav('/history')
   }
 
   return (
@@ -327,20 +287,6 @@ export function PrintPage(): JSX.Element {
           />
         </div>
       </div>
-
-      <Modal
-        title="版式有改动，是否保存？"
-        open={saveOpen}
-        onCancel={() => { setSaveOpen(false); nav('/history') }}
-        cancelText="不保存"
-        footer={[
-          <Button key="no" onClick={() => { setSaveOpen(false); nav('/history') }}>不保存</Button>,
-          <Button key="new" onClick={saveAsNew}>另存为新模板</Button>,
-          <Button key="yes" type="primary" onClick={saveOverwrite}>保存到原模板</Button>
-        ]}
-      >
-        <p>本次打印前对版式做了修改。可保存到原模板、另存为新模板，或仅本次生效不保存。</p>
-      </Modal>
 
       <Modal open={paperHintOpen} title="自定义纸张输出提示" okText="仍要打印" cancelText="取消"
         onOk={() => void confirmPaperHint(false)} onCancel={cancelPaperHint}>

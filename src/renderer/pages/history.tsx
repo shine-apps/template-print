@@ -58,9 +58,7 @@ export function HistoryPage(): JSX.Element {
     clearDraft()
     sessionDraft.doc = job.templateSnapshot
     sessionDraft.paramValues = job.paramValues
-    sessionDraft.fromHistory = true
     sessionDraft.returnToPrint = false
-    sessionDraft.baselineJson = JSON.stringify(job.templateSnapshot)
     nav('/print')
   }
 

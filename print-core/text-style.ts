@@ -9,6 +9,8 @@ export const SYSTEM_FONT_STACK =
 
 export type TextDirection = 'horizontal' | 'vertical'
 export type TextAlign = 'left' | 'center' | 'right'
+/** 竖排多行（列）方向：rtl=从右到左（vertical-rl）、ltr=从左到右（vertical-lr） */
+export type ColumnDirection = 'ltr' | 'rtl'
 
 export interface TextStyleProps {
   fontFamily: string
@@ -17,6 +19,7 @@ export interface TextStyleProps {
   italic: boolean
   underline: boolean
   direction: TextDirection
+  columnDirection: ColumnDirection
   align: TextAlign
   color: string
   lineHeight: number
@@ -48,7 +51,8 @@ function fontDecls(p: TextStyleProps): Record<string, string | number> {
 /**
  * DOM/HTML 文本样式：
  * - 横排：单层 flex 容器，align-items:safe center 垂直居中（溢出退化为顶部对齐，不裁首行）
- * - 竖排：{ outer, inner }——outer 用 flex row-reverse 决定列组对齐，inner 用 writing-mode 竖排
+ * - 竖排：{ outer, inner }——outer 固定 flex row-reverse 决定列组对齐（与列方向无关），
+ *   inner 用 writing-mode 竖排：columnDirection rtl → vertical-rl，ltr → vertical-lr
  */
 type CssDecl = string | number | undefined
 export function textCssProps(p: TextStyleProps): {
@@ -67,8 +71,12 @@ export function textCssProps(p: TextStyleProps): {
         overflow: 'hidden'
       },
       inner: {
-        writingMode: 'vertical-rl',
-        textOrientation: 'mixed',
+        // 列方向：rtl 用 vertical-rl（从右到左），ltr 用 vertical-lr（从左到右）；
+        // 外层 flex row-reverse 的对齐语义与列方向无关，保持不变
+        writingMode: p.columnDirection === 'ltr' ? 'vertical-lr' : 'vertical-rl',
+        // upright：竖排中汉字、数字、英文字母一律正立（每个半角字符占一个字身格）；
+        // 如需拉丁/数字顺时针横躺的传统混排，改回 'mixed'
+        textOrientation: 'upright',
         height: '100%',
         ...fontDecls(p),
         color: p.color,

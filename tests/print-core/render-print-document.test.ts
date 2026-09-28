@@ -82,15 +82,28 @@ describe('renderPrintDocument', () => {
     expect(renderPrintDocument(doc, {}, {})).toContain('text-decoration:underline')
   })
 
-  it('竖排输出 writing-mode/text-orientation 与 flex row-reverse；align left 映射 justify-content:flex-start', () => {
-    const doc = baseDoc([createElement('text', { text: '甲{{乙}}', direction: 'vertical', align: 'left' }, { x: 1, y: 1, w: 20, h: 40 })])
+  it('竖排默认 rtl：输出 writing-mode:vertical-rl 与 flex row-reverse；align left 映射 justify-content:flex-start', () => {
+    const doc = baseDoc([createElement('text',
+      { text: '甲{{乙}}', direction: 'vertical', align: 'left' },
+      { x: 1, y: 1, w: 20, h: 40 })])
     const html = renderPrintDocument(doc, { 乙: '乙' }, {})
     expect(html).toContain('writing-mode:vertical-rl')
-    expect(html).toContain('text-orientation:mixed')
+    expect(html).toContain('text-orientation:upright')
     expect(html).toContain('flex-direction:row-reverse')
     expect(html).toContain('justify-content:flex-start')
     // 竖排同样允许超长 ASCII 串逐字断列，与 layoutText 强制断字一致
     expect(html).toContain('word-break:break-word')
+  })
+
+  it('竖排 columnDirection=ltr 输出 writing-mode:vertical-lr', () => {
+    const doc = baseDoc([createElement('text',
+      { text: '甲乙丙丁', direction: 'vertical', columnDirection: 'ltr', align: 'left' },
+      { x: 1, y: 1, w: 20, h: 40 })])
+    const html = renderPrintDocument(doc, {}, {})
+    expect(html).toContain('writing-mode:vertical-lr')
+    expect(html).not.toContain('writing-mode:vertical-rl')
+    // 外层 flex row-reverse 的对齐语义与列方向无关，保持不变
+    expect(html).toContain('flex-direction:row-reverse')
   })
 
   it('横排文本内层撑满元素框并裁剪溢出（height:100% + overflow:hidden）', () => {
@@ -105,7 +118,7 @@ describe('renderPrintDocument', () => {
   it('内联 style 中字体名只用单引号：双引号会提前闭合属性导致加粗/下划线等声明丢失', () => {
     const doc = baseDoc([
       createElement('text',
-        { text: '甲乙', fontFamily: '', bold: true, italic: true, underline: true, direction: 'vertical', align: 'center' },
+        { text: '甲乙', fontFamily: '', bold: true, italic: true, underline: true, direction: 'vertical', columnDirection: 'rtl', align: 'center' },
         { x: 1, y: 1, w: 20, h: 40 })
     ])
     const html = renderPrintDocument(doc, {}, {})

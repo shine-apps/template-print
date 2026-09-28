@@ -28,11 +28,14 @@ export const TextElementSchema = GeometrySchema.extend({
     color: z.string().default('#000000'),
     lineHeight: z.number().positive().default(1.2),
     underline: z.boolean().default(false),
-    direction: z.enum(['horizontal', 'vertical']).default('horizontal')
+    direction: z.enum(['horizontal', 'vertical']).default('horizontal'),
+    // 竖排多行（列）方向：rtl=从右到左（vertical-rl，传统）、ltr=从左到右（vertical-lr）
+    columnDirection: z.enum(['ltr', 'rtl']).default('rtl')
   })
 })
 
 export type TextDirection = 'horizontal' | 'vertical'
+export type ColumnDirection = 'ltr' | 'rtl'
 /** 未显式指定字体时（fontFamily===''）画布与打印共用的系统默认字体栈 */
 export const SYSTEM_FONT_STACK =
   'system-ui, "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif'

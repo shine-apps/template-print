@@ -11,6 +11,7 @@ const p = (over: Partial<Parameters<typeof textCssProps>[0]> = {}) => ({
   align: 'left' as const,
   color: '#000000',
   lineHeight: 1.2,
+  columnDirection: 'rtl' as const,
   ...over
 })
 
@@ -38,11 +39,17 @@ describe('textCssProps 横排', () => {
 })
 
 describe('textCssProps 竖排', () => {
-  it('返回 outer(row-reverse)+inner(writing-mode) 两层', () => {
+  it('返回 outer(row-reverse)+inner(writing-mode) 两层；默认 rtl 输出 vertical-rl', () => {
     const { outer, inner } = textCssProps(p({ direction: 'vertical' }))
     expect(outer.flexDirection).toBe('row-reverse')
     expect(inner?.writingMode).toBe('vertical-rl')
-    expect(inner?.textOrientation).toBe('mixed')
+    expect(inner?.textOrientation).toBe('upright')
+  })
+  it('columnDirection=ltr 输出 vertical-lr，外层 row-reverse 保持不变', () => {
+    const { outer, inner } = textCssProps(p({ direction: 'vertical', columnDirection: 'ltr' }))
+    expect(outer.flexDirection).toBe('row-reverse')
+    expect(inner?.writingMode).toBe('vertical-lr')
+    expect(inner?.writingMode).not.toBe('vertical-rl')
   })
   it('align 映射到 justifyContent（left=贴右=flex-start）', () => {
     expect(textCssProps(p({ direction: 'vertical', align: 'left' })).outer.justifyContent).toBe('flex-start')
@@ -61,9 +68,13 @@ describe('textCssString / toCssString', () => {
     expect(s.outer).toContain('align-items:safe center')
     expect(s.outer).toContain('font-size:10mm')
   })
-  it('竖排返回两段字符串', () => {
-    const s = textCssString(p({ direction: 'vertical' }))
-    expect(s.outer).toContain('flex-direction:row-reverse')
-    expect(s.inner).toContain('writing-mode:vertical-rl')
+  it('竖排返回两段字符串；列方向切换 writing-mode（默认 rtl / ltr）', () => {
+    const rtl = textCssString(p({ direction: 'vertical' }))
+    expect(rtl.outer).toContain('flex-direction:row-reverse')
+    expect(rtl.inner).toContain('writing-mode:vertical-rl')
+    const ltr = textCssString(p({ direction: 'vertical', columnDirection: 'ltr' }))
+    expect(ltr.outer).toContain('flex-direction:row-reverse')
+    expect(ltr.inner).toContain('writing-mode:vertical-lr')
+    expect(ltr.inner).not.toContain('writing-mode:vertical-rl')
   })
 })

@@ -5,6 +5,7 @@ import {
   createElement,
   createParamDef
 } from '../../print-core/template-model'
+import type { TemplateDocument, TemplateElement } from '../../print-core/template-model'
 
 describe('模板模型校验', () => {
   it('合法模板通过校验', () => {
@@ -39,6 +40,7 @@ describe('模板模型校验', () => {
     const t = parsed.content.elements.find((e) => e.type === 'text')!
     expect(t.props.underline).toBe(false)
     expect(t.props.direction).toBe('horizontal')
+    expect(t.props.columnDirection).toBe('rtl')
   })
 
   it('v3：direction 仅接受 horizontal/vertical；underline 为布尔', () => {
@@ -52,6 +54,28 @@ describe('模板模型校验', () => {
       ...d, content: { elements: [{ ...d.content.elements[0], props: { ...d.content.elements[0].props, direction: 'sideways' } }] }
     })
     expect(bad.success).toBe(false)
+  })
+
+  it('columnDirection 仅接受 ltr/rtl，默认 rtl；缺字段由 zod 补默认', () => {
+    const makeDoc = (columnDirection: string | undefined): TemplateDocument => {
+      const d = createTemplate('t', 'x', { widthMm: 40, heightMm: 30 })
+      d.content.elements.push(createElement('text',
+        { text: '竖', direction: 'vertical', ...(columnDirection ? { columnDirection } : {}) },
+        { x: 1, y: 1, w: 10, h: 20 }))
+      return d
+    }
+    const textPropsOf = (doc: TemplateDocument) =>
+      (doc.content.elements.find((e) => e.type === 'text') as Extract<TemplateElement, { type: 'text' }>).props
+
+    expect(textPropsOf(TemplateDocumentSchema.parse(makeDoc('ltr'))).columnDirection).toBe('ltr')
+
+    const raw = JSON.parse(JSON.stringify(makeDoc(undefined)))
+    expect(textPropsOf(TemplateDocumentSchema.parse(raw)).columnDirection).toBe('rtl')
+
+    // 非法枚举：绕过 createElement（它内部也会 zod 解析），直接改原始 JSON
+    const badRaw = JSON.parse(JSON.stringify(makeDoc('ltr')))
+    badRaw.content.elements[0].props.columnDirection = 'ttb'
+    expect(TemplateDocumentSchema.safeParse(badRaw).success).toBe(false)
   })
 
   it('textOnly：createTemplate 默认 true；缺字段 zod 补 true；显式 false 保留', () => {

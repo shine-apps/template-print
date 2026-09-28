@@ -67,13 +67,14 @@ function renderTextHtml(
     align: 'left' | 'center' | 'right'
     color: string
     lineHeight: number
+    columnDirection: 'rtl' | 'ltr'
   },
   values: Record<string, string>
 ): string {
   const body = textSegments(p.text, values)
   const { outer, inner } = textCssString(p as TextStyleProps)
   if (p.direction === 'vertical') {
-    // 外层 flex row-reverse 实现列组对齐（left=贴右=flex-start）；内层 vertical-rl 实现竖排
+    // 外层 flex row-reverse 实现列组对齐（left=贴右=flex-start）；内层 writing-mode 按列方向竖排（vertical-rl/vertical-lr）
     return `<div style="${outer}"><div style="${inner}">${body}</div></div>`
   }
   // 横排：flex + align-items:safe center 垂直居中（溢出退化为顶部对齐，不裁首行）

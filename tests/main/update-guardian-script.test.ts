@@ -18,6 +18,17 @@ describe('buildGuardianScript', () => {
       "msiexec.exe",
       'INSTALLDIR="',
       '3010',
+      // 内容魔数探测：扩展名不可信（MSI 可能被存成 .exe）
+      '[System.IO.File]::OpenRead($params.setupPath)',
+      '0xD0',
+      '0xCF',
+      '0x11',
+      '0xE0',
+      "if ($isMsi -or $ext -eq '.msi')",
+      // 诊断：异常类型 + Win32 原生错误码
+      'NativeErrorCode',
+      // 日志 UTF-8（保留中文本地化异常消息）
+      '-Encoding UTF8',
       "Write-GuardianState 'done'",
       "Write-GuardianState 'failed'",
       '-Verb RunAs',

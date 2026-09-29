@@ -47,6 +47,27 @@ export interface UpdateServiceDeps {
 
 const DAY_MS = 24 * 3600 * 1000
 
+/**
+ * 从清单 URL 提取安装包的真实文件后缀（含点、小写，如 '.msi' / '.exe'）。
+ * 规则：下载地址是什么后缀，落地文件就用什么后缀；URL 无后缀时返回 ''，
+ * 绝不臆造默认后缀（安装方式由 guardian 读文件头魔数 + 后缀双重判定）。
+ * URL 允许是相对地址或带 query（?...），故先经 URL 解析取 pathname。
+ * 仅接受形如 .xxx 的短字母数字后缀，防止异常 URL 把路径分隔符带进文件名。
+ */
+function setupExt(url: string): string {
+  let pathname: string
+  try {
+    pathname = new URL(url, 'http://localhost/').pathname
+  } catch {
+    return ''
+  }
+  const base = pathname.split('/').pop() ?? ''
+  const dot = base.lastIndexOf('.')
+  if (dot <= 0) return ''
+  const ext = base.slice(dot).toLowerCase()
+  return /^\.[a-z0-9]{1,8}$/.test(ext) ? ext : ''
+}
+
 /** 用 Electron net 拉文本（8s 超时，自动代理） */
 async function netGetText(url: string, timeoutMs: number): Promise<string> {
   const { net } = await import('electron')
@@ -182,9 +203,13 @@ export class UpdateService {
 
   // ---------- 下载 + 校验 ----------
   private filePaths(version: string): { part: string; final: string } {
+    // 后缀完全沿用清单 URL 中安装包的真实后缀（.msi 就存 .msi，.exe 就存 .exe），
+    // 不做任何默认假设；无后缀 URL 落地为无后缀文件。
+    // 安装分派由 guardian 读文件头魔数 + 后缀双重判定，错误后缀/无后缀也能走对分支。
+    const ext = this.latest ? setupExt(this.latest.url) : ''
     return {
-      part: join(this.downloadsDir, `Setup-${version}.exe.part`),
-      final: join(this.downloadsDir, `Setup-${version}.exe`)
+      part: join(this.downloadsDir, `Setup-${version}${ext}.part`),
+      final: join(this.downloadsDir, `Setup-${version}${ext}`)
     }
   }
 

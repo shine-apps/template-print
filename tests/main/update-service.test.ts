@@ -193,6 +193,43 @@ describe('UpdateService 下载/校验/安装', () => {
     server.close()
   })
 
+  it('清单 url 指向 .msi（含 query）→ 落地为 .msi，绝不套用 .exe 名', async () => {
+    const msiTpl = { ...manifest, url: 'TemplatePrint-9.9.9-Setup-x64.msi?token=abc' }
+    const { server, base } = await startFileServer(msiTpl)
+    const { svc, events } = makeSvc(base)
+    await svc.check(false)
+    await svc.download()
+    const phases = events
+      .filter((e) => e.channel === 'update:progress')
+      .map((e) => (e.payload as UpdateProgressPayload).phase)
+    expect(phases.at(-1)).toBe('ready')
+    expect(existsSync(join(dir, 'updates', 'downloads', 'Setup-9.9.9.msi'))).toBe(true)
+    expect(existsSync(join(dir, 'updates', 'downloads', 'Setup-9.9.9.exe'))).toBe(false)
+    server.close()
+  })
+
+  it('清单 url 无后缀 → 落地为无后缀文件，绝不臆造 .exe', async () => {
+    const noExtTpl = { ...manifest, url: '/download/9.9.9/' }
+    const { server, base } = await startFileServer(noExtTpl)
+    const { svc } = makeSvc(base)
+    await svc.check(false)
+    await svc.download()
+    expect(existsSync(join(dir, 'updates', 'downloads', 'Setup-9.9.9'))).toBe(true)
+    expect(existsSync(join(dir, 'updates', 'downloads', 'Setup-9.9.9.exe'))).toBe(false)
+    expect(existsSync(join(dir, 'updates', 'downloads', 'Setup-9.9.9.msi'))).toBe(false)
+    server.close()
+  })
+
+  it('清单 url 后缀大写（相对路径+query）→ 后缀归一化为小写保留', async () => {
+    const upperTpl = { ...manifest, url: 'TemplatePrint-9.9.9-Setup-x64.MSI?a=1' }
+    const { server, base } = await startFileServer(upperTpl)
+    const { svc } = makeSvc(base)
+    await svc.check(false)
+    await svc.download()
+    expect(existsSync(join(dir, 'updates', 'downloads', 'Setup-9.9.9.msi'))).toBe(true)
+    server.close()
+  })
+
   it('sha 不符 → error(checksum-mismatch) 且残包被删', async () => {
     const bad = { ...manifest, sha256: 'f'.repeat(64) }
     const { server, base } = await startFileServer(bad)

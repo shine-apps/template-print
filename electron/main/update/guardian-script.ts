@@ -1,6 +1,6 @@
 /** 守护脚本参数（主进程写 guardian-params.json，UTF-8；路径可含非 ASCII） */
 export interface GuardianParams {
-  /** 已下载校验通过的安装包绝对路径（支持 .exe NSIS 或 .msi） */
+  /** 已下载校验通过的安装包绝对路径（后缀与清单 URL 一致；安装方式按文件头魔数+后缀判定） */
   setupPath: string
   /** 当前应用 exe 绝对路径（其目录即安装目录/备份源） */
   exePath: string
@@ -30,7 +30,9 @@ $installDir = Split-Path $params.exePath -Parent
 
 function Write-Log($m) {
   $line = (Get-Date).ToString('s') + ' ' + $m
-  Out-File -FilePath $logFile -Append -Encoding ASCII -InputObject $line
+  # UTF-8 so localized exception messages (e.g. zh-CN Win32 errors) survive.
+  # The script source itself stays pure ASCII for PS5.1 no-BOM compatibility.
+  Out-File -FilePath $logFile -Append -Encoding UTF8 -InputObject $line
 }
 function Write-GuardianState($phase, $reason) {
   $o = [ordered]@{
@@ -118,14 +120,32 @@ try {
   Write-Log ('backup exit ' + $LASTEXITCODE)
 
   # 4) Silent install - explicitly target the current install directory.
-  #    NSIS (.exe): /S + /D=<dir> (NSIS rule: /D must be LAST arg, path NOT quoted).
-  #    MSI  (.msi): msiexec /i <pkg> INSTALLDIR="<dir>" /qn /norestart
+  #    MSI  (.msi or OLE2 content): msiexec /i <pkg> INSTALLDIR="<dir>" /qn /norestart
   #                 exit 0 = OK, 3010 = OK restart-required.
+  #    Other (e.g. NSIS .exe): run the installer directly with /S /D=<dir>
+  #    (NSIS rule: /D must be LAST arg, path NOT quoted).
   #    Without an explicit target dir the installer may use its default location
   #    (especially after self-elevation changes the registry hive), leaving the
   #    old exe untouched -> verify-failed -> rollback.
+  #    Content sniffing beats extension: an MSI saved with an .exe name is an OLE2
+  #    compound document (magic D0 CF 11 E0 A1 B1 1A E1); launching it as a PE
+  #    fails instantly with Win32 error 193 (not a valid Win32 application) and
+  #    the guardian rolls back for no reason, leaving the old version in place.
+  $isMsi = $false
+  try {
+    $fh = [System.IO.File]::OpenRead($params.setupPath)
+    try {
+      $head = New-Object byte[] 8
+      $read = $fh.Read($head, 0, 8)
+      if ($read -eq 8 -and $head[0] -eq 0xD0 -and $head[1] -eq 0xCF -and $head[2] -eq 0x11 -and $head[3] -eq 0xE0) {
+        $isMsi = $true
+      }
+    } finally { $fh.Close() }
+  } catch {
+    Write-Log ('read-head-failed ' + $_.Exception.GetType().Name)
+  }
   $ext = [System.IO.Path]::GetExtension($params.setupPath).ToLowerInvariant()
-  if ($ext -eq '.msi') {
+  if ($isMsi -or $ext -eq '.msi') {
     $msiArgs = '/i "' + $params.setupPath + '" INSTALLDIR="' + $installDir + '" /qn /norestart'
     $p = Start-Process -FilePath 'msiexec.exe' -ArgumentList $msiArgs -Wait -PassThru
     Write-Log ('installer exit ' + $p.ExitCode)
@@ -147,7 +167,11 @@ try {
   Start-App
   exit 0
 } catch {
-  Write-Log ('exception ' + $_.Exception.Message)
+  $native = ''
+  if ($_.Exception -is [System.ComponentModel.Win32Exception]) {
+    $native = ' win32=' + $_.Exception.NativeErrorCode
+  }
+  Write-Log ('exception ' + $_.Exception.GetType().Name + $native + ' ' + $_.Exception.Message)
   Fail-Guardian 'installer-failed'
 }
 `

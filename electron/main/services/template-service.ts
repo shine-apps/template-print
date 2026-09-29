@@ -29,14 +29,17 @@ export class TemplateService {
     return this.repo.getById(id)
   }
   async create(input: NewTemplateInput): Promise<TemplateDocument> {
+    const trimmedName = input.name.trim()
+    if (!trimmedName) throw new Error('模板名称不能为空')
     const now = Date.now()
-    const doc = createTemplate(localId('tpl'), input.name, { widthMm: input.widthMm, heightMm: input.heightMm }, now)
+    const doc = createTemplate(localId('tpl'), trimmedName, { widthMm: input.widthMm, heightMm: input.heightMm }, now)
     doc.category = input.category ?? ''
     this.repo.upsert(doc)
     return doc
   }
   async save(doc: TemplateDocument): Promise<TemplateDocument> {
     const parsed = TemplateDocumentSchema.parse({ ...doc, updatedAt: Date.now() })
+    if (!parsed.name.trim()) throw new Error('模板名称不能为空')
     // 若图片元素引用的资产属于其他模板（如从其他模板复制来的草稿），
     // 复制一份到本模板并重新分配 assetId，确保模板自包含、删除原模板不影响副本。
     for (const el of parsed.content.elements) {

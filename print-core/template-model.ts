@@ -120,7 +120,7 @@ export type PrintMode = z.infer<typeof PrintModeSchema>
 export const TemplateDocumentSchema = z
   .object({
     id: z.string().min(1),
-    name: z.string().min(1),
+    name: z.string().default(''),
     category: z.string().default(''),
     paper: PaperSchema,
     content: ContentSchema.default({ elements: [] }),

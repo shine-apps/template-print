@@ -76,4 +76,11 @@ describe('designer store', () => {
     expect(doc.content.elements).toHaveLength(1)
     expect(doc.content.elements[0].type === 'text' && doc.content.elements[0].props.text).toBe('你好{{姓名}}')
   })
+
+  it('mutate 允许将 name 临时清空（保存时才校验）', () => {
+    useDesignerStore.getState().mutate((d) => { d.name = '' })
+    expect(useDesignerStore.getState().doc.name).toBe('')
+    useDesignerStore.getState().mutate((d) => { d.name = '新名称' })
+    expect(useDesignerStore.getState().doc.name).toBe('新名称')
+  })
 })

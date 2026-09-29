@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Space, Spin, Input, InputNumber, Select, Tooltip, Popover, message } from 'antd'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useDesignerStore } from '../store/designer-store'
 import { PAPER_PRESETS } from '../../../shared/paper-presets'
-import { DesignerCanvas } from '../designer/canvas'
 import { ElementLibrary } from '../designer/element-library'
 import { LayersPanel } from '../designer/layers-panel'
 import { PropertyPanel } from '../designer/property-panel'
 import { TemplateDocumentSchema, createTemplate, localId, type TemplateDocument } from '../../../print-core/template-model'
 import { setNavBlocker } from '../nav-guard'
+
+// 画布（含 konva）懒加载：首屏先渲染工具栏与面板，名称等输入框立即可交互，
+// 双 rAF 后才开始加载/挂载画布，避开首帧 Konva 初始化与 antd cssinjs 注入的长任务
+const DesignerCanvas = lazy(() =>
+  import('../designer/canvas').then((m) => ({ default: m.DesignerCanvas }))
+)
 
 /** 基于源模板构建一份内存草稿副本（不入库）：新临时 id、名称追加"副本"、元素重新分配 id；
  *  图片元素暂沿用原 assetId，保存时后端会复制并重新分配。 */
@@ -30,11 +35,26 @@ function buildDuplicateDraft(src: TemplateDocument): TemplateDocument {
   })
 }
 
+/** 画布懒加载/挂载完成前的占位：保持与画布相同的底色，避免白屏跳动 */
+function CanvasFallback(): JSX.Element {
+  return (
+    <div style={{
+      height: '100%', background: '#e9ecef',
+      display: 'flex', alignItems: 'center', justifyContent: 'center'
+    }}>
+      <Spin />
+    </div>
+  )
+}
+
 export function DesignerPage(): JSX.Element {
   const { id } = useParams()
   const nav = useNavigate()
   const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(true)
+  // 数据载入后再让画布延迟两帧挂载：先把工具栏（名称/纸张/分类）渲染出来并可交互，
+  // 随后才加载 konva 重模块，避免首帧长任务期间输入框看得见但点不进、打不了字
+  const [canvasReady, setCanvasReady] = useState(false)
   // 保存/保存并去打印进行中（同时防止新模板重复创建）
   const [saving, setSaving] = useState(false)
   const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([])
@@ -84,6 +104,8 @@ export function DesignerPage(): JSX.Element {
 
   // 实时校验：未修改或校验未通过时「保存并去打印」禁用（safeParse 同步，doc 变更才重渲染）
   const saveIssue = useMemo(() => {
+    const trimmedName = doc.name.trim()
+    if (!trimmedName) return '模板名称不能为空'
     const r = TemplateDocumentSchema.safeParse(doc)
     return r.success ? null : (r.error.issues[0]?.message ?? '模板校验未通过')
   }, [doc])
@@ -109,11 +131,28 @@ export function DesignerPage(): JSX.Element {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [dirty])
 
+  // loading 结束（工具栏首帧已提交）后再等两帧：首帧保证名称等输入框已挂载并能接收
+  // 事件，第二帧后才启动画布懒加载，把 konva chunk 解析与画布挂载的长任务推到工具栏
+  // 可交互之后（effect 必须在 if(loading) 早返回之前注册，遵守 Hooks 规则）
+  useEffect(() => {
+    if (loading) return
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setCanvasReady(true))
+    })
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2) }
+  }, [loading])
+
   /**
    * 保存当前模板；成功返回模板 id，失败弹错误提示并返回 null（调用方不得继续跳转）。
    * new-template 模式（未持久化）首次保存：先按当前名称/纸张 create，再写入完整工作副本。
    */
   async function save(): Promise<string | null> {
+    const trimmedName = doc.name.trim()
+    if (!trimmedName) {
+      message.error('模板名称不能为空')
+      return null
+    }
     const parsed = TemplateDocumentSchema.safeParse(doc)
     if (!parsed.success) {
       message.error('保存失败：' + (parsed.error.issues[0]?.message ?? '模板校验未通过'))
@@ -240,6 +279,7 @@ export function DesignerPage(): JSX.Element {
           <Space size={24} style={{ marginTop: 8, marginRight: 16 }}>
             <Space size={6}>
               <span style={fieldLabelStyle}>名称</span>
+              <span style={{ color: '#f00', fontSize: 12, lineHeight: 1.4 }}>*</span>
               <Input variant="outlined" style={{ width: 200 }} value={doc.name}
                 onChange={(e) => useDesignerStore.getState().mutate((d) => { d.name = e.target.value })} />
             </Space>
@@ -297,7 +337,15 @@ export function DesignerPage(): JSX.Element {
             )}
           </Space>
         </div>
-        <div style={{ flex: 1 }}><DesignerCanvas /></div>
+        <div style={{ flex: 1 }}>
+          {canvasReady ? (
+            <Suspense fallback={<CanvasFallback />}>
+              <DesignerCanvas />
+            </Suspense>
+          ) : (
+            <CanvasFallback />
+          )}
+        </div>
       </div>
       <div style={{ minWidth: 200, width: 300, background: '#fff', borderLeft: '1px solid #eee', overflow: 'auto' }}>
         <PropertyPanel onCommitted={commit} />

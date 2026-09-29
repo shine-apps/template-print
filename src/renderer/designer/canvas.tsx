@@ -57,12 +57,15 @@ function NonTextShape({ el, scale, onSelect, onChange, assetUrls, onDragMove, on
   onDragEnd: (el: TemplateElement, node: Konva.Node) => void
   registerNode: (id: string, node: Konva.Node | null) => void
 }): JSX.Element {
-  const shapeRef = useRef<Konva.Node>(null)
+  const shapeRef = useRef<Konva.Node | null>(null)
   const imageEl = useLoadedImage(el.type === 'image' ? assetUrls[el.props.assetId] : undefined)
 
-  useEffect(() => {
-    registerNode(el.id, shapeRef.current)
-    return () => registerNode(el.id, null)
+  // 用 callback ref 同步注册：节点在 reconciler mutation 阶段即入表，
+  // 保证「新增元素并在同一次提交中被选中」时 NodeTransformer 的 effect 能查到节点
+  // （渲染期 passive effect 尚未执行、表中无节点会导致 Transformer 拿到 undefined 崩溃）
+  const setShapeNode = useCallback((n: Konva.Node | null): void => {
+    shapeRef.current = n
+    registerNode(el.id, n)
   }, [el.id, registerNode])
 
   const common = {
@@ -125,7 +128,7 @@ function NonTextShape({ el, scale, onSelect, onChange, assetUrls, onDragMove, on
     if (el.props.shape === 'line') {
       // Group 定位在左上角；内部 Line 相对 Group 画水平中线，不接收指针事件
       body = (
-        <Group ref={shapeRef as never} {...common}>
+        <Group ref={setShapeNode as never} {...common}>
           <Line listening={false}
             points={[0, MM(el.h, scale) / 2, MM(el.w, scale), MM(el.h, scale) / 2]}
             stroke={el.props.strokeColor} strokeWidth={stk} />
@@ -133,7 +136,7 @@ function NonTextShape({ el, scale, onSelect, onChange, assetUrls, onDragMove, on
       )
     } else if (el.props.shape === 'ellipse') {
       body = (
-        <Group ref={shapeRef as never} {...common}>
+        <Group ref={setShapeNode as never} {...common}>
           <Ellipse listening={false}
             x={MM(el.w, scale) / 2} y={MM(el.h, scale) / 2}
             radiusX={MM(el.w, scale) / 2} radiusY={MM(el.h, scale) / 2}
@@ -141,7 +144,7 @@ function NonTextShape({ el, scale, onSelect, onChange, assetUrls, onDragMove, on
         </Group>
       )
     } else {
-      body = <Rect ref={shapeRef as never} {...common}
+      body = <Rect ref={setShapeNode as never} {...common}
         stroke={el.props.strokeColor} strokeWidth={stk} fill={el.props.fillColor ?? undefined} />
     }
   } else if (el.type === 'image') {
@@ -163,7 +166,7 @@ function NonTextShape({ el, scale, onSelect, onChange, assetUrls, onDragMove, on
     // Group 作为 shapeRef 接收拖动/Transformer；透明 Rect 定义元素框并接收指针事件
     // （fill=transparent 在 Konva 中仍有 hit area）；KImage 按 contain 居中显示
     body = (
-      <Group ref={shapeRef as never} {...common}
+      <Group ref={setShapeNode as never} {...common}
         clipX={0} clipY={0} clipWidth={boxW} clipHeight={boxH}>
         <Rect width={boxW} height={boxH} fill="transparent" />
         <KImage x={offX} y={offY} width={imgW} height={imgH} image={imageEl}
@@ -223,14 +226,16 @@ function TextHit({ el, scale, onSelect, onEdit, onChange, onSyncDom, registerNod
   onSyncDom: (el: TemplateElement, node: Konva.Node) => void
   registerNode: (id: string, node: Konva.Rect | null) => void
 }): JSX.Element {
-  const rectRef = useRef<Konva.Rect>(null)
-  useEffect(() => {
-    registerNode(el.id, rectRef.current)
-    return () => registerNode(el.id, null)
+  const rectRef = useRef<Konva.Rect | null>(null)
+  // callback ref 同步注册（同 NonTextShape.setShapeNode：避免新增文本立即选中时
+  // Transformer 在渲染期取到 undefined 节点）
+  const setRectNode = useCallback((n: Konva.Rect | null): void => {
+    rectRef.current = n
+    registerNode(el.id, n)
   }, [el.id, registerNode])
   return (
     <Rect
-      ref={rectRef}
+      ref={setRectNode}
       id={el.id}
       x={MM(el.x, scale)}
       y={MM(el.y, scale)}
@@ -259,19 +264,26 @@ function TextHit({ el, scale, onSelect, onEdit, onChange, onSyncDom, registerNod
   )
 }
 
-/** 统一在层内所有节点之后渲染的 Transformer：保证锚点命中像素不被同层其他元素覆盖 */
-function NodeTransformer({ node, keepRatio, enabledAnchors }: {
-  node: Konva.Node
+/** 统一在层内所有节点之后渲染的 Transformer：保证锚点命中像素不被同层其他元素覆盖。
+ *  节点通过 getNode 在 effect 执行时懒查询：新增元素在同一次提交中首次挂载并立即
+ *  被选中时，渲染期闭包拿到的节点会是 undefined（ref 尚未挂上），若直接传给
+ *  Konva，attach() 读取 node.isAncestorOf 会抛 TypeError。 */
+function NodeTransformer({ getNode, keepRatio, enabledAnchors }: {
+  getNode: () => Konva.Node | undefined
   keepRatio?: boolean
   enabledAnchors?: string[]
 }): JSX.Element {
   const trRef = useRef<Konva.Transformer>(null)
   useEffect(() => {
-    if (trRef.current) {
-      trRef.current.nodes([node])
-      trRef.current.getLayer()?.batchDraw()
+    const tr = trRef.current
+    const node = getNode()
+    if (!tr || !node) return
+    // 同一节点不重复 detach/attach；无 deps，每次渲染后都尝试绑定，兜底首次漏查
+    if (tr.nodes()[0] !== node) {
+      tr.nodes([node])
+      tr.getLayer()?.batchDraw()
     }
-  }, [node])
+  })
   return (
     <Transformer ref={trRef}
       keepRatio={keepRatio}
@@ -291,9 +303,9 @@ export function DesignerCanvas(): JSX.Element {
   const requestTextEdit = useDesignerStore((s) => s.requestTextEdit)
   const [scale, setScale] = useState(1)
   const [assetUrls, setAssetUrls] = useState<Record<string, string>>({})
-  const [gridOn, setGridOn] = useState(() => localStorage.getItem('tp-grid') === '1')
+  // 网格默认关闭，仅在本次设计会话内开启，不跨会话记忆
+  const [gridOn, setGridOn] = useState(false)
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] })
-  useEffect(() => { localStorage.setItem('tp-grid', gridOn ? '1' : '0') }, [gridOn])
   const imageEls = doc.content.elements.filter((e) => e.type === 'image')
   const imageAssetIds = imageEls.map((e) => (e as Extract<typeof e, { type: 'image' }>).props.assetId)
   useEffect(() => {
@@ -483,7 +495,7 @@ export function DesignerCanvas(): JSX.Element {
                 registerNode={registerShapeNode} />
             ))}
             {seg.els.filter((el) => el.id === selectedId).map((el) => (
-              <NodeTransformer key={`tr-${el.id}`} node={shapeNodeRefs.current.get(el.id) as Konva.Node}
+              <NodeTransformer key={`tr-${el.id}`} getNode={() => shapeNodeRefs.current.get(el.id)}
                 enabledAnchors={isGroupWrapped(el) ? [] : undefined} />
             ))}
           </Layer>
@@ -501,7 +513,7 @@ export function DesignerCanvas(): JSX.Element {
           ))}
           {textEls.filter((el) => el.id === selectedId).map((el) => (
             // 文本框宽高独立可调（文本随框回流），关闭 Konva v9 默认开启的等比缩放
-            <NodeTransformer key={`tr-${el.id}`} node={hitNodeRefs.current.get(el.id) as Konva.Node} keepRatio={false} />
+            <NodeTransformer key={`tr-${el.id}`} getNode={() => hitNodeRefs.current.get(el.id)} keepRatio={false} />
           ))}
           {guides.v.map((gx) => (
             <Line key={`av${gx}`} listening={false}

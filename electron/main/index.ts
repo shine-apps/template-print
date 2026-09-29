@@ -39,17 +39,22 @@ function createWindow(): BrowserWindow {
       sandbox: false
     }
   })
+  // 注意：此处只创建窗口，不加载页面。由调用方在 registerIpc 之后再 load，
+  // 保证渲染端发出的首个 IPC（templates:get/list 等）一定已有处理器。
+  win.on('closed', () => {
+    mainWindow = null
+  })
+  mainWindow = win
+  return win
+}
+
+function loadWindow(win: BrowserWindow): void {
   // electron-vite dev 下由其注入 dev server URL；打包后加载文件
   if (process.env['ELECTRON_RENDERER_URL']) {
     void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     void win.loadFile(join(__dirname, '../renderer/index.html'))
   }
-  win.on('closed', () => {
-    mainWindow = null
-  })
-  mainWindow = win
-  return win
 }
 
 /**
@@ -76,8 +81,8 @@ if (!gotSingleInstanceLock) {
   })
 
   app.whenReady().then(async () => {
-    // 不显示 Electron 默认菜单栏（文件/编辑/视图…）
-    Menu.setApplicationMenu(null)
+    // 仅打包后移除 Electron 默认菜单栏；dev 保留菜单方便开发调试（刷新/开发者工具等）
+    if (app.isPackaged) Menu.setApplicationMenu(null)
     const p = paths()
     const client = createDb(p.dbFile)
     runMigrations(client)
@@ -92,13 +97,27 @@ if (!gotSingleInstanceLock) {
     const seeds = new SeedService(p.dataDir, templates)
     const update = UpdateService.createDefault(p.dataDir)
     const services: Services = { assets, templates, history, print, printers, fonts, settings, backups, update }
-    createWindow()
-    registerIpc(mainWindow!, services)
-    await seeds.seedIfNeeded()
-    history.runScheduledCleanup()
-    void backups.runDaily()
+    // 先建窗口、注册全部 IPC，最后才加载页面：渲染进程脚本一就绪即可成功调用 IPC，
+    // 不会出现"页面已显示但首个 templates:get 无处理器/排队"的窗口期
+    const win = createWindow()
+    registerIpc(win, services)
+    loadWindow(win)
+    // seed 事务与历史清理都是 better-sqlite3 同步操作，冷启动时会短暂占满主进程事件循环
+    // （叠加杀软扫描 app.db 更慢）。推迟到首屏加载完成后执行，并再让出 300ms 给渲染端
+    // 首批 IPC（模板列表/详情）优先处理，避免设计器数据加载被播种任务拖慢。
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        if (win.isDestroyed()) return
+        void seeds.seedIfNeeded()
+          .then(() => {
+            history.runScheduledCleanup()
+            void backups.runDaily()
+          })
+          .catch((e) => console.error('startup seed/maintenance failed:', e))
+      }, 300)
+    })
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      if (BrowserWindow.getAllWindows().length === 0) loadWindow(createWindow())
       else activateMainWindow()
     })
   })

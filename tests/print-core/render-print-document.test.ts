@@ -107,7 +107,7 @@ describe('renderPrintDocument', () => {
   })
 
   it('横排文本内层撑满元素框并裁剪溢出（height:100% + overflow:hidden）', () => {
-    const doc = baseDoc([createElement('text', { text: '很长的中文内容'.repeat(8) }, { x: 1, y: 1, w: 30, h: 10 })])
+    const doc = baseDoc([createElement('text', { text: '很长的中文内容'.repeat(8), align: 'left' }, { x: 1, y: 1, w: 30, h: 10 })])
     const html = renderPrintDocument(doc, {}, {})
     const body = [...html.matchAll(/style="([^"]*)"/g)].map((m) => m[1])
       .find((s) => s.includes('text-align:left'))

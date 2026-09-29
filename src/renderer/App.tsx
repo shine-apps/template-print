@@ -1,5 +1,6 @@
-import { ConfigProvider, Layout, Menu } from 'antd'
+import { App as AntdApp, ConfigProvider, Layout, Menu } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
+import { useEffect } from 'react'
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { TemplatesPage } from './pages/templates'
 import { DesignerPage } from './pages/designer'
@@ -8,13 +9,19 @@ import { HistoryPage } from './pages/history'
 import { SettingsPage } from './pages/settings'
 import { AboutPage } from './pages/about'
 import { UpdateModal } from './update/update-modal'
-import { confirmLeave } from './nav-guard'
+import { confirmLeave, setNavConfirm } from './nav-guard'
 
 const { Sider, Content } = Layout
 
 function Shell(): JSX.Element {
   const nav = useNavigate()
   const loc = useLocation()
+  const { modal } = AntdApp.useApp()
+  // 把继承 ConfigProvider 主题/语言的 confirm 注册给导航守卫
+  useEffect(() => {
+    setNavConfirm(modal.confirm)
+    return () => setNavConfirm(null)
+  }, [modal])
   const selected = loc.pathname.startsWith('/history') ? '/history'
     : loc.pathname.startsWith('/settings') ? '/settings'
     : loc.pathname.startsWith('/about') ? '/about'
@@ -30,7 +37,7 @@ function Shell(): JSX.Element {
             theme="dark"
             mode="inline"
             selectedKeys={[selected]}
-            onClick={(e) => { if (confirmLeave()) nav(e.key) }}
+            onClick={(e) => confirmLeave(() => nav(e.key))}
             items={[
               { key: '/templates', label: '模板列表' },
               { key: '/designer', label: '模板设计' },
@@ -63,9 +70,11 @@ function Shell(): JSX.Element {
 export function App(): JSX.Element {
   return (
     <ConfigProvider locale={zhCN}>
-      <HashRouter>
-        <Shell />
-      </HashRouter>
+      <AntdApp>
+        <HashRouter>
+          <Shell />
+        </HashRouter>
+      </AntdApp>
     </ConfigProvider>
   )
 }

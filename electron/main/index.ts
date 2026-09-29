@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, dialog } from 'electron'
 import { join } from 'node:path'
 import { APP_NAME } from '../../shared/app-info'
 import { paths } from './app-paths'
@@ -41,6 +41,19 @@ function createWindow(): BrowserWindow {
   })
   // 注意：此处只创建窗口，不加载页面。由调用方在 registerIpc 之后再 load，
   // 保证渲染端发出的首个 IPC（templates:get/list 等）一定已有处理器。
+  // 渲染端设计器在有未保存修改时会用 beforeunload 阻止卸载；Electron 默认不弹
+  // 任何确认框（窗口会静默关不掉），需主进程接管 will-prevent-unload 主动询问。
+  win.webContents.on('will-prevent-unload', (event) => {
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'warning',
+      buttons: ['离开', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+      title: '未保存的修改',
+      message: '当前模板有未保存的修改，确定离开吗？'
+    })
+    if (choice === 0) event.preventDefault()
+  })
   win.on('closed', () => {
     mainWindow = null
   })

@@ -1,5 +1,5 @@
 import { useRef, type ChangeEvent } from 'react'
-import { Button, Dropdown, Space, message } from 'antd'
+import { Button, Space, message } from 'antd'
 import { createElement } from '../../../print-core/template-model'
 import { useDesignerStore } from '../store/designer-store'
 
@@ -71,17 +71,8 @@ export function ElementLibrary(): JSX.Element {
     <div>
       <div style={{ opacity: 0.7, fontSize: 12, margin: '4px 0' }}>添加元素</div>
       <Space direction="vertical" style={{ width: '100%' }}>
-        <Dropdown
-          menu={{
-            items: [
-              { key: 'h', label: '横排文本框' },
-              { key: 'v', label: '竖排文本框' }
-            ],
-            onClick: ({ key }) => addText(key === 'v' ? 'vertical' : 'horizontal')
-          }}
-          trigger={['click']}>
-          <Button block>文本 ▾</Button>
-        </Dropdown>
+        <Button block onClick={() => addText('horizontal')}>横排文本框</Button>
+        <Button block onClick={() => addText('vertical')}>竖排文本框</Button>
         <div style={{ opacity: 0.55, fontSize: 12, margin: '6px 0' }}>
           文本中用 {'{{参数名称}}'} 引用参数
         </div>

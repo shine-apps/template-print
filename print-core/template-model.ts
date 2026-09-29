@@ -82,7 +82,7 @@ export const ParamDefSchema = z.object({
     .refine((n) => !/[{}]/.test(n) && !/[\r\n]/.test(n), '参数名称不能包含 { } 或换行'),
   type: ParamTypeSchema,
   required: z.boolean().default(true),
-  defaultValue: z.string().default('today'),
+  defaultValue: z.string().default(''),
   dateFormat: z.string().default('yyyy-MM-dd'),
   maxLength: z.number().int().positive().nullable().default(null),
   min: z.number().nullable().default(null),

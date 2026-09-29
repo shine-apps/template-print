@@ -270,7 +270,7 @@ export function DesignerPage(): JSX.Element {
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
-      <div style={{ minWidth: 150, width: 200, background: '#1f2937', color: '#fff', padding: 8, overflow: 'auto' }}>
+      <div style={{ minWidth: 150, width: 250, background: '#1f2937', color: '#fff', padding: 8, overflow: 'auto' }}>
         <ElementLibrary />
         <LayersPanel />
       </div>

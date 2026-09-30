@@ -33,9 +33,11 @@ export function formatNumber(raw: string, decimals: number, sep: boolean): strin
   return dec ? `${grouped}.${dec}` : grouped
 }
 
-export function applyEmpty(raw: string, mode: 'blank' | 'line'): string {
+export function applyEmpty(raw: string, mode: ParamDef['printOnEmpty'], name = ''): string {
   if (raw.trim() !== '') return raw
-  return mode === 'line' ? EMPTY_LINE_TOKEN : ''
+  if (mode === 'line') return EMPTY_LINE_TOKEN
+  if (mode === 'name') return name
+  return ''
 }
 
 /**
@@ -71,7 +73,7 @@ export function evaluateParams(
       default:
         value = raw
     }
-    out[def.name] = applyEmpty(value, def.printOnEmpty)
+    out[def.name] = applyEmpty(value, def.printOnEmpty, def.name)
   }
 
   if (errors.length > 0) out.__errors = errors

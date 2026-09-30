@@ -89,7 +89,8 @@ export const ParamDefSchema = z.object({
   max: z.number().nullable().default(null),
   decimals: z.number().int().min(0).max(6).default(2),
   thousandsSeparator: z.boolean().default(false),
-  printOnEmpty: z.enum(['blank', 'line']).default('blank'),
+  // 值为空时：name=直接打印参数名称（默认，兼作占位提示）、blank=留空白、line=占位横线
+  printOnEmpty: z.enum(['name', 'blank', 'line']).default('name'),
   order: z.number().int().default(0)
 })
 export type ParamDef = z.infer<typeof ParamDefSchema>
@@ -216,7 +217,7 @@ export function createParamDef(
     max: null,
     decimals: 2,
     thousandsSeparator: false,
-    printOnEmpty: 'blank',
+    printOnEmpty: 'name',
     order: 0,
     ...rest
   })

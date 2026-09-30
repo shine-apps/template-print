@@ -115,7 +115,7 @@ const elements = doc.textOnly
 
 - textOnly=true 且模板无任何文本元素：输出空白页（合法，等同全元素都被过滤）；不报错。
 - textOnly=true 时图片资产文件丢失：允许打印（跳过校验）。
-- 仅文本模式下 token 未定义仍替换为空串、`printOnEmpty:line` 仍输出下划线占位——行为与完整模式一致。
+- 仅文本模式下 token 未定义仍替换为空串、`printOnEmpty:line` 仍输出下划线占位、`printOnEmpty:name` 仍输出参数名称——行为与完整模式一致。
 - 横/竖排文本的裁剪与字体行为与现状一致（不涉及本次改动）。
 - 内置模板 textOnly 默认 true 后首次打印无边框，属预期；取消勾选并保存后永久恢复完整打印。
 - 历史旧快照缺 textOnly 字段：zod 解析默认 true——旧记录重打变为仅文本。

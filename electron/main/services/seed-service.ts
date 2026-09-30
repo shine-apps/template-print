@@ -8,8 +8,8 @@ import {
 import { loadSettings, saveSettings } from '../settings'
 import type { TemplateService } from './template-service'
 
-/** 播种版本：内置模板内容变更时递增，触发重新幂等播种（v2：参数改为文本 token 形态） */
-export const SEED_VERSION = 'm3-v2-params'
+/** 播种版本：内置模板内容变更时递增，触发重新幂等播种（v3：参数空值默认显示参数名称） */
+export const SEED_VERSION = 'm3-v3-empty-name'
 /** 内置模板固定 id 前缀，便于幂等 */
 export const SEED_PREFIX = 'builtin-'
 

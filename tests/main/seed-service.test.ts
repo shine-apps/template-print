@@ -62,8 +62,8 @@ describe('seedSpecs / SeedService', () => {
     }
   })
 
-  it('SEED_VERSION 为 m3-v2-params', () => {
-    expect(SEED_VERSION).toBe('m3-v2-params')
+  it('SEED_VERSION 为 m3-v3-empty-name', () => {
+    expect(SEED_VERSION).toBe('m3-v3-empty-name')
   })
 
   it('首次播种插入 3 个；第二次幂等不重复', async () => {

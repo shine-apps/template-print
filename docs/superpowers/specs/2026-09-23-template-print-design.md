@@ -147,7 +147,7 @@ type TemplateElement =
 | max_length | 文本最大长度 |
 | min / max | 数字范围 |
 | decimals / thousands_separator | 数字格式（小数位、千分位） |
-| print_on_empty | 空值处理：`blank` 留空白 \| `line` 占位横线 |
+| print_on_empty | 空值处理：`name` 直接打印参数名称（默认） \| `blank` 留空白 \| `line` 占位横线 |
 
 引用方式：文本元素 props.text 中写 `{{参数名称}}`（括号内侧空白忽略）；打印时按名称替换，未定义名称替换为空串；改名时同步替换全部文本 token。删除模板时级联删除参数定义。
 
@@ -268,7 +268,7 @@ type TemplateElement =
 - 文本中的 token 语法：`{{参数名称}}`，正则 `/\{\{\s*([^{}]+?)\s*\}\}/g`（允许中文，括号内侧空白忽略）；按名称查求值结果，未定义名称替换为空串，所有插入值做 HTML 转义。
 - date：按 `date_format` 格式化；默认值 `today` 在打开填写页时解析为当天。
 - number：按小数位/千分位输出。
-- 空值：`blank` 输出空串；`line` 输出下划线片段（行内 token）。
+- 空值（`applyEmpty(raw, mode, name)`，2026-09-30）：`name`（默认）输出参数名称原文；`blank` 输出空串；`line` 输出下划线片段（行内 token `EMPTY_LINE_TOKEN`）。
 
 ### 7.2 打印 HTML 渲染
 
@@ -345,7 +345,7 @@ template-print/
 ## 9. 测试策略
 
 - **print-core 单元测试（重点）**：
-  - 参数求值：日期格式、默认今天、数字千分位/小数位、空值空白/横线；
+  - 参数求值：日期格式、默认今天、数字千分位/小数位、空值显示名称/空白/横线；
   - 毫米/微米/pt 换算；
   - `render-print-html` 输出快照（含各元素类型、旋转、超长文本 autoFit）；
   - zod 模型校验：非法元素、缺字段、参数 key 冲突。

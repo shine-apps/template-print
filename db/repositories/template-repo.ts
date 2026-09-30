@@ -30,7 +30,7 @@ interface ParamRow {
   max: number | null
   decimals: number
   thousandsSeparator: number | boolean
-  printOnEmpty: 'blank' | 'line'
+  printOnEmpty: 'name' | 'blank' | 'line'
   order: number
 }
 

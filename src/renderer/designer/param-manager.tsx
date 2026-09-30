@@ -126,7 +126,11 @@ function ParamEditModal({ def, isNew, otherNames, onOk, onCancel }: {
         )}
         <Form.Item label="值为空时">
           <Select value={f.printOnEmpty} onChange={(v) => setF({ ...f, printOnEmpty: v })}
-            options={[{ value: 'blank', label: '留空白' }, { value: 'line', label: '打印占位横线' }]} />
+            options={[
+              { value: 'name', label: '显示参数名称' },
+              { value: 'blank', label: '留空白' },
+              { value: 'line', label: '打印占位横线' }
+            ]} />
         </Form.Item>
         {!isNew && <div style={{ color: '#999', fontSize: 12 }}>改名会同步替换文本中已引用的 {'{名称}'}。</div>}
       </Form>

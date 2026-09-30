@@ -40,7 +40,7 @@ export function AboutPage(): JSX.Element {
           </Space>
           <Paragraph type="secondary" style={{ marginBottom: 0 }}>
             可视化模板设计与打印工具：自定义纸张尺寸，文本/图片/图形自由排版，
-            参数占位自动填值，支持横排与竖排文本、仅打印文本（预印纸套打）、
+            参数占位自动填值，支持文本排版、仅打印文本（预印纸套打）、
             静默/弹框打印、打印历史与数据备份，适配标签机与普通办公打印机。
           </Paragraph>
         </Space>

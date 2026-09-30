@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, statSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, statSync, chmodSync } from 'node:fs'
 import {
   UpdateManifestSchema,
   compareVersions,
@@ -326,7 +326,13 @@ export class UpdateService {
       return
     }
     if (st.phase === 'done') {
-      this.pruneBackups()
+      // 备份清理是纯维护动作：失败（文件被杀软/索引器短暂占用等）只记日志，
+      // 绝不能阻断状态文件删除与「更新完成」通知，更不能把异常冒成 unhandled rejection
+      try {
+        this.pruneBackups()
+      } catch (e) {
+        console.warn('[update] pruneBackups failed:', (e as Error).message)
+      }
       rmSync(this.stateFile, { force: true })
       this.emit('update:installed', { version: st.to })
     } else {
@@ -336,13 +342,46 @@ export class UpdateService {
     }
   }
 
-  /** 只保留最近一个 backup-* 目录 */
+  /** 只保留最近一个 backup-* 目录；单个旧备份删不掉不影响其它清理（留在磁盘下次启动再清） */
   private pruneBackups(): void {
     const dirs = readdirSync(this.updatesDir, { withFileTypes: true })
       .filter((d) => d.isDirectory() && d.name.startsWith('backup-'))
       .map((d) => ({ name: d.name, mtime: statSync(join(this.updatesDir, d.name)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime)
-    for (const d of dirs.slice(1)) rmSync(join(this.updatesDir, d.name), { recursive: true, force: true })
+      // mtime 相同时（测试中同一毫秒造出多个备份）按版本号兜底，避免并列时删掉最新备份
+      .sort((a, b) => (b.mtime - a.mtime) || compareVersions(b.name.slice('backup-'.length), a.name.slice('backup-'.length)))
+    for (const d of dirs.slice(1)) {
+      try {
+        this.removeBackupDir(join(this.updatesDir, d.name))
+      } catch (e) {
+        console.warn(`[update] remove old backup failed, keep it: ${d.name}`, (e as Error).message)
+      }
+    }
+  }
+
+  /**
+   * 递归删除更新备份目录（Windows 专用防护）。
+   * NSIS 安装的应用文件带只读属性，guardian 的 robocopy /E 备份原样保留该属性；
+   * 实测 Electron 内置 Node（v24.21）的 fs.rmSync 遇目录内含只读文件必抛 EPERM，
+   * 且 maxRetries 的 fixWinEPERM 路径在 Electron 运行时不生效（system Node 24 同场景可删）。
+   * 故先递归 chmod 0o666 清掉只读位再删；maxRetries 仅作为杀软/索引器短暂占用的兜底重试。
+   */
+  private removeBackupDir(dir: string): void {
+    const clearReadonly = (d: string): void => {
+      for (const ent of readdirSync(d, { withFileTypes: true })) {
+        const p = join(d, ent.name)
+        if (ent.isDirectory()) {
+          clearReadonly(p)
+        } else {
+          try { chmodSync(p, 0o666) } catch { /* 文件被占用时 chmod 可能失败，交给 rmSync 报错 */ }
+        }
+      }
+    }
+    try {
+      clearReadonly(dir)
+    } catch {
+      // readdir 都失败（如目录已不存在/无权限）直接交给 rmSync 的 force 与外层兜底
+    }
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   }
 
   get logDir(): string {

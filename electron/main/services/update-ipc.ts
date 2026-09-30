@@ -24,6 +24,7 @@ export function registerUpdateHandlers(deps: Services, win: BrowserWindow): void
   ipcMain.handle(IPC.updateOpenLogDir, () => shell.openPath(svc.logDir))
 
   // 启动安装结果处理（done/failed 通知）与每日自动检查
-  void svc.handleInstallState()
+  // 收尾 .catch 为最后一道防线：handleInstallState 内部已容错，任何漏网异常只记日志
+  void svc.handleInstallState().catch((e) => console.error('[update] handleInstallState failed:', e))
   svc.startAutoCheck()
 }

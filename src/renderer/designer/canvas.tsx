@@ -216,13 +216,17 @@ function TextDom({ el, scale, registerRef }: {
 
 /** 文本元素的透明热区 Rect：选中/拖拽/缩放/旋转/双击编辑。
  *  Transformer 由 hit 层在所有热区 Rect 之后统一渲染（见 DesignerCanvas），
- *  否则高 zIndex 文本的热区命中像素会盖住低 zIndex 选中文本的变换锚点。 */
-function TextHit({ el, scale, onSelect, onEdit, onChange, onSyncDom, registerNode }: {
+ *  否则高 zIndex 文本的热区命中像素会盖住低 zIndex 选中文本的变换锚点。
+ *  注意：拖拽必须同时接 onDragMove（视觉跟随+吸附）与 onDragEnd（坐标落 store），
+ *  漏掉 onDragEnd 会导致文本框看似移动但 doc/dirty 不变、保存无效。 */
+function TextHit({ el, scale, onSelect, onEdit, onChange, onDragMove, onDragEnd, onSyncDom, registerNode }: {
   el: TextEl
   scale: number
   onSelect: () => void
   onEdit: () => void
   onChange: (patch: Partial<Pick<TemplateElement, 'x' | 'y' | 'w' | 'h' | 'rotation'>>) => void
+  onDragMove: (el: TemplateElement, node: Konva.Node) => void
+  onDragEnd: (el: TemplateElement, node: Konva.Node) => void
   onSyncDom: (el: TemplateElement, node: Konva.Node) => void
   registerNode: (id: string, node: Konva.Rect | null) => void
 }): JSX.Element {
@@ -247,7 +251,8 @@ function TextHit({ el, scale, onSelect, onEdit, onChange, onSyncDom, registerNod
       onClick={onSelect}
       onTap={onSelect}
       onDblClick={onEdit}
-      onDragMove={(e) => onSyncDom(el, e.target)}
+      onDragMove={(e) => onDragMove(el, e.target)}
+      onDragEnd={(e) => onDragEnd(el, e.target)}
       onTransform={(e) => onSyncDom(el, e.target)}
       onTransformEnd={(e) => {
         const node = e.target
@@ -508,6 +513,8 @@ export function DesignerCanvas(): JSX.Element {
               onSelect={() => select(el.id)}
               onEdit={() => editText(el)}
               onChange={(patch) => updateGeometry(el.id, patch)}
+              onDragMove={handleDragMove}
+              onDragEnd={handleDragEnd}
               onSyncDom={syncTextDom}
               registerNode={registerHitNode} />
           ))}

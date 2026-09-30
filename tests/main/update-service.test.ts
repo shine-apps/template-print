@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mkdirSync, existsSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdirSync, existsSync, writeFileSync, readFileSync, chmodSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { spawn } from 'node:child_process'
 import { createServer, type Server } from 'node:http'
 import * as http from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -295,6 +296,72 @@ describe('UpdateService 安装状态与自动检查节流', () => {
     const p = events.map((e) => e.payload).at(-1) as { reason: string }
     expect(p.reason).toBe('interrupted')
     server.close()
+  })
+
+  it('done 状态清理备份：含只读文件的旧备份被删除，仅保留最新备份', async () => {
+    const { svc, events } = makeSvc('http://x/')
+    const oldBak = join(dir, 'updates', 'backup-0.9.0')
+    const newBak = join(dir, 'updates', 'backup-0.9.2')
+    mkdirSync(join(oldBak, 'locales'), { recursive: true })
+    mkdirSync(newBak, { recursive: true })
+    // NSIS 安装产物带只读属性（guardian robocopy /E 备份原样保留）——Electron 运行时
+    // fs.rmSync 遇只读文件必 EPERM，必须先递归 chmod 清只读位才能删
+    for (const f of ['app.exe', join('locales', 'zh.pak')]) {
+      const p = join(oldBak, f)
+      writeFileSync(p, 'old')
+      chmodSync(p, 0o444)
+    }
+    writeFileSync(join(newBak, 'app.exe'), 'new')
+    writeFileSync(
+      join(dir, 'updates', 'install-state.json'),
+      JSON.stringify({ from: '0.9.2', to: '0.9.4', phase: 'done', reason: null, ts: 1 })
+    )
+
+    await svc.handleInstallState()
+    expect(existsSync(oldBak)).toBe(false)
+    expect(existsSync(newBak)).toBe(true)
+    expect(existsSync(join(dir, 'updates', 'install-state.json'))).toBe(false)
+    expect(
+      events.map((e) => e.payload).some((p) => (p as { version?: string }).version === '0.9.4')
+    ).toBe(true)
+  })
+
+  it.skipIf(process.platform !== 'win32')('旧备份删不掉（目录被进程占用）→ 不抛异常，状态照清、installed 照发、目录留待下次', async () => {
+    const { svc, events } = makeSvc('http://x/')
+    const oldBak = join(dir, 'updates', 'backup-0.9.0')
+    const newBak = join(dir, 'updates', 'backup-0.9.2')
+    mkdirSync(oldBak, { recursive: true })
+    mkdirSync(newBak, { recursive: true })
+    writeFileSync(join(oldBak, 'app.exe'), 'old')
+    // Windows 下进程的工作目录不能被删除（ERROR_CURRENT_DIRECTORY→EPERM/EBUSY），
+    // 用一个挂起的 PowerShell 把 CWD 占在旧备份里，模拟真实环境的目录占用
+    const holder = spawn(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 60'],
+      { cwd: oldBak, stdio: 'ignore', windowsHide: true }
+    )
+    await new Promise((r) => setTimeout(r, 500))
+    writeFileSync(
+      join(dir, 'updates', 'install-state.json'),
+      JSON.stringify({ from: '0.9.2', to: '0.9.4', phase: 'done', reason: null, ts: 1 })
+    )
+
+    try {
+      await expect(svc.handleInstallState()).resolves.toBeUndefined()
+      expect(existsSync(oldBak)).toBe(true)
+      expect(existsSync(newBak)).toBe(true)
+      expect(existsSync(join(dir, 'updates', 'install-state.json'))).toBe(false)
+      expect(
+        events.map((e) => e.payload).some((p) => (p as { version?: string }).version === '0.9.4')
+      ).toBe(true)
+    } finally {
+      await new Promise<void>((resolve) => {
+        holder.once('exit', () => resolve())
+        holder.kill()
+      })
+      // CWD 句柄已释放，清掉残留空目录避免 temp 堆积
+      rmSync(oldBak, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
   })
 
   it('shouldAutoCheck：关开关/24h内不查；null时间戳/超过24h 可查；dev 恒 false', () => {

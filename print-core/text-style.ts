@@ -113,3 +113,15 @@ export function textCssString(p: TextStyleProps): { outer: string; inner?: strin
   const { outer, inner } = textCssProps(p)
   return { outer: toCssString(outer), inner: inner ? toCssString(inner) : undefined }
 }
+
+/** 竖排逐字 span 样式（方案 B 逐字绝对定位用）：只含字体/颜色/行高/居中，不含布局与下划线。
+ *  布局（top/left/width/height）由 render-print-document 按 mm 显式计算，下划线由调用方按需追加。 */
+export function verticalGlyphCss(p: TextStyleProps): string {
+  const decls: Record<string, CssDecl> = {
+    ...fontDecls(p),
+    color: p.color,
+    lineHeight: 1,
+    textAlign: 'center'
+  }
+  return toCssString(decls)
+}

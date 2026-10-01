@@ -1,6 +1,6 @@
 import type { TemplateDocument, TemplateElement } from './template-model'
 import { EMPTY_LINE_TOKEN } from './param-evaluator'
-import { textCssString, type TextStyleProps } from './text-style'
+import { textCssString, verticalGlyphCss, type TextStyleProps } from './text-style'
 
 export interface RenderOptions {
   /** assetId → 可在打印窗口/预览中访问的图片 URL（file:// 或 data:） */
@@ -55,29 +55,118 @@ function textSegments(text: string, values: Record<string, string>): string {
   return parts.join('')
 }
 
-function renderTextHtml(
-  p: {
-    text: string
-    fontFamily: string
-    fontSizeMm: number
-    bold: boolean
-    italic: boolean
-    underline: boolean
-    direction: 'horizontal' | 'vertical'
-    align: 'left' | 'center' | 'right'
-    color: string
-    lineHeight: number
-    columnDirection: 'rtl' | 'ltr'
-  },
-  values: Record<string, string>
+type TextProps = {
+  text: string
+  fontFamily: string
+  fontSizeMm: number
+  bold: boolean
+  italic: boolean
+  underline: boolean
+  direction: 'horizontal' | 'vertical'
+  align: 'left' | 'center' | 'right'
+  color: string
+  lineHeight: number
+  columnDirection: 'rtl' | 'ltr'
+}
+
+/** 竖排逐字单元格：char=单字（每字占一个字身格），empty-line=空值横线占位，br=换行强制断列 */
+type VCell =
+  | { kind: 'char'; ch: string }
+  | { kind: 'empty-line' }
+  | { kind: 'br' }
+
+/** 竖排：把文本解析成逐字单元格序列（含 {{参数}} 求值、\n 断列、空值横线占位） */
+function verticalCells(text: string, values: Record<string, string>): VCell[] {
+  const re = /\{\{\s*([^{}]+?)\s*\}\}/g
+  const cells: VCell[] = []
+  let last = 0
+  let m: RegExpExecArray | null
+  const pushChars = (raw: string): void => {
+    for (const ch of raw) {
+      if (ch === '\n') cells.push({ kind: 'br' })
+      else cells.push({ kind: 'char', ch })
+    }
+  }
+  while ((m = re.exec(text))) {
+    pushChars(text.slice(last, m.index))
+    const v = values[m[1].trim()] ?? ''
+    if (v === EMPTY_LINE_TOKEN) cells.push({ kind: 'empty-line' })
+    else pushChars(v)
+    last = m.index + m[0].length
+  }
+  pushChars(text.slice(last))
+  return cells
+}
+
+/**
+ * 方案 B：竖排不再依赖 writing-mode，改为逐字绝对定位 span。
+ * 每个字的垂直推进用显式 top = row × fontSizeMm（1em），列宽 = fontSizeMm × lineHeight，
+ * 消除浏览器 vertical-rl/lr 逐字推进的字体 vertical advance 亚像素取整在
+ * 「预览 96dpi 屏幕排版」与「webContents.print 打印机 DPI 排版」两套管线间的累积偏差。
+ */
+function renderVerticalHtml(
+  p: TextProps,
+  values: Record<string, string>,
+  boxW: number,
+  boxH: number
 ): string {
-  const body = textSegments(p.text, values)
-  const { outer, inner } = textCssString(p as TextStyleProps)
+  const cells = verticalCells(p.text, values)
+  const glyphCss = verticalGlyphCss(p as TextStyleProps)
+  if (cells.length === 0) {
+    return `<div style="position:relative;width:100%;height:100%;overflow:hidden"></div>`
+  }
+  const fs = p.fontSizeMm
+  const colW = fs * p.lineHeight
+  const maxPerCol = Math.max(1, Math.floor(boxH / fs))
+  // 拆列：\n 强制断列；每列最多 maxPerCol 字（1em 推进）
+  const cols: VCell[][] = []
+  let cur: VCell[] = []
+  for (const c of cells) {
+    if (c.kind === 'br') {
+      if (cur.length > 0) { cols.push(cur); cur = [] }
+    } else {
+      cur.push(c)
+      if (cur.length >= maxPerCol) { cols.push(cur); cur = [] }
+    }
+  }
+  if (cur.length > 0) cols.push(cur)
+  const n = cols.length
+  const groupW = n * colW
+  // 列组水平对齐：与外层 flex row-reverse 的历史语义一致——align=left 贴右、right 贴左、center 居中
+  const originX =
+    p.align === 'left' ? Math.max(0, boxW - groupW)
+    : p.align === 'right' ? 0
+    : Math.max(0, (boxW - groupW) / 2)
+  const spans: string[] = []
+  cols.forEach((col, i) => {
+    // rtl：第 0 列在最右；ltr：第 0 列在最左
+    const colLeft = originX + (p.columnDirection === 'ltr' ? i * colW : (n - 1 - i) * colW)
+    col.forEach((c, row) => {
+      const top = row * fs
+      const content = c.kind === 'char' ? esc(c.ch) : '&nbsp;'
+      const underline = p.underline || c.kind === 'empty-line'
+      const underlineCss = underline ? 'text-decoration:underline;text-decoration-thickness:0.2mm;' : ''
+      spans.push(
+        `<span style="position:absolute;left:${colLeft}mm;top:${top}mm;width:${colW}mm;height:${fs}mm;` +
+        `${glyphCss};${underlineCss}">${content}</span>`
+      )
+    })
+  })
+  return `<div style="position:relative;width:100%;height:100%;overflow:hidden">${spans.join('')}</div>`
+}
+
+function renderTextHtml(
+  p: TextProps,
+  values: Record<string, string>,
+  boxW: number,
+  boxH: number
+): string {
   if (p.direction === 'vertical') {
-    // 外层 flex row-reverse 实现列组对齐（left=贴右=flex-start）；内层 writing-mode 按列方向竖排（vertical-rl/vertical-lr）
-    return `<div style="${outer}"><div style="${inner}">${body}</div></div>`
+    return renderVerticalHtml(p, values, boxW, boxH)
   }
   // 横排：flex + align-items:safe center 垂直居中（溢出退化为顶部对齐，不裁首行）
+  const body = textSegments(p.text, values)
+  const { outer } = textCssString(p as TextStyleProps)
   return `<div style="${outer}">${body}</div>`
 }
 
@@ -85,7 +174,7 @@ function renderElement(el: TemplateElement, values: Record<string, string>, asse
   const style = geoStyle(el)
   switch (el.type) {
     case 'text':
-      return `<div style="${style}">${renderTextHtml(el.props, values)}</div>`
+      return `<div style="${style}">${renderTextHtml(el.props, values, el.w, el.h)}</div>`
     case 'image': {
       const p = el.props
       const src = assetUrls[p.assetId] ?? ''

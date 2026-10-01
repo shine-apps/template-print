@@ -82,28 +82,34 @@ describe('renderPrintDocument', () => {
     expect(renderPrintDocument(doc, {}, {})).toContain('text-decoration:underline')
   })
 
-  it('竖排默认 rtl：输出 writing-mode:vertical-rl 与 flex row-reverse；align left 映射 justify-content:flex-start', () => {
+  it('竖排默认 rtl：逐字绝对定位 span（方案 B），无 writing-mode，align=left 贴右', () => {
     const doc = baseDoc([createElement('text',
       { text: '甲{{乙}}', direction: 'vertical', align: 'left' },
       { x: 1, y: 1, w: 20, h: 40 })])
     const html = renderPrintDocument(doc, { 乙: '乙' }, {})
-    expect(html).toContain('writing-mode:vertical-rl')
-    expect(html).toContain('text-orientation:upright')
-    expect(html).toContain('flex-direction:row-reverse')
-    expect(html).toContain('justify-content:flex-start')
-    // 竖排同样允许超长 ASCII 串逐字断列，与 layoutText 强制断字一致
-    expect(html).toContain('word-break:break-word')
+    expect(html).not.toContain('writing-mode')
+    expect(html).not.toContain('text-orientation')
+    expect(html).not.toContain('flex-direction:row-reverse')
+    expect(html).toContain('position:relative;width:100%;height:100%;overflow:hidden')
+    // 每字垂直推进 1em(5mm)：第二个字 top=5mm
+    expect(html).toContain('top:5mm')
+    // align=left 贴右：单列组宽 6mm(=5×1.2)，originX = 20-6 = 14
+    expect(html).toContain('left:14mm')
   })
 
-  it('竖排 columnDirection=ltr 输出 writing-mode:vertical-lr', () => {
-    const doc = baseDoc([createElement('text',
+  it('竖排 columnDirection=ltr 首列在左、rtl 首列在右（逐字绝对定位）', () => {
+    const ltrDoc = baseDoc([createElement('text',
       { text: '甲乙丙丁', direction: 'vertical', columnDirection: 'ltr', align: 'left' },
-      { x: 1, y: 1, w: 20, h: 40 })])
-    const html = renderPrintDocument(doc, {}, {})
-    expect(html).toContain('writing-mode:vertical-lr')
-    expect(html).not.toContain('writing-mode:vertical-rl')
-    // 外层 flex row-reverse 的对齐语义与列方向无关，保持不变
-    expect(html).toContain('flex-direction:row-reverse')
+      { x: 1, y: 1, w: 20, h: 12 })])
+    const rtlDoc = baseDoc([createElement('text',
+      { text: '甲乙丙丁', direction: 'vertical', columnDirection: 'rtl', align: 'left' },
+      { x: 1, y: 1, w: 20, h: 12 })])
+    expect(renderPrintDocument(ltrDoc, {}, {})).not.toContain('writing-mode')
+    // boxH=12 → maxPerCol=floor(12/5)=2；4 字拆 2 列，列宽 6、组宽 12；align=left → originX=8。
+    // ltr：首列(甲乙)在左 left=8mm
+    expect(renderPrintDocument(ltrDoc, {}, {})).toMatch(/left:8mm;[^>]*>甲</)
+    // rtl：首列在最右 left=8+6=14mm
+    expect(renderPrintDocument(rtlDoc, {}, {})).toMatch(/left:14mm;[^>]*>甲</)
   })
 
   it('横排文本内层撑满元素框并裁剪溢出（height:100% + overflow:hidden）', () => {
@@ -129,7 +135,9 @@ describe('renderPrintDocument', () => {
     expect(textBody).toContain("'Microsoft YaHei'")
     expect(textBody).toContain('font-style:italic')
     expect(textBody).toContain('text-decoration:underline')
-    expect(textBody).toContain('writing-mode:vertical-rl')
+    // 方案 B：竖排改用逐字绝对定位 span，不再出现 writing-mode
+    expect(textBody).toContain('position:absolute')
+    expect(html).not.toContain('writing-mode')
     expect(html).not.toContain('"Microsoft YaHei"')
   })
 

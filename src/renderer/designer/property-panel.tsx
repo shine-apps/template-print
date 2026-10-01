@@ -1,4 +1,4 @@
-import { Button, ColorPicker, InputNumber, Input, Select, Space, Switch, Divider } from 'antd'
+import { Button, ColorPicker, InputNumber, Input, Select, Segmented, Space, Switch, Divider } from 'antd'
 import type { TextAreaRef } from 'antd/es/input/TextArea'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useDesignerStore } from '../store/designer-store'
@@ -75,6 +75,17 @@ export function PropertyPanel({ onCommitted }: { onCommitted: () => void }): JSX
               family === '' ? {} : { fontFamily: `"${family}"` }
             return (
               <>
+                <Segmented block value={tp.direction}
+                  options={[{ value: 'horizontal', label: '横排' }, { value: 'vertical', label: '竖排' }]}
+                  onChange={(v) => props({ direction: v as 'horizontal' | 'vertical' })} />
+                {tp.direction === 'vertical' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: '#666', whiteSpace: 'nowrap' }}>列方向</span>
+                    <Segmented size="small" value={tp.columnDirection}
+                      options={[{ value: 'rtl', label: '从右到左' }, { value: 'ltr', label: '从左到右' }]}
+                      onChange={(v) => props({ columnDirection: v as 'rtl' | 'ltr' })} />
+                  </div>
+                )}
                 <Input.TextArea ref={textAreaRef} rows={2} value={tp.text}
                   onChange={(e) => props({ text: e.target.value })} />
                 {doc.params.length > 0 && (

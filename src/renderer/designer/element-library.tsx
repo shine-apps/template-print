@@ -20,11 +20,11 @@ export function ElementLibrary(): JSX.Element {
     commit()
   }
 
-  function addText(): void {
+  function addText(direction: 'horizontal' | 'vertical'): void {
     const el = createElement(
       'text',
-      { text: '右侧文本框编辑文本', fontFamily: '', direction: 'horizontal' },
-      { x: 20, y: 20, w: 60, h: 8 }
+      { text: '右侧文本框编辑文本', fontFamily: '', direction },
+      { x: 20, y: 20, w: direction === 'vertical' ? 14 : 60, h: direction === 'vertical' ? 60 : 8 }
     )
     addElement(el)
     commit()
@@ -71,7 +71,8 @@ export function ElementLibrary(): JSX.Element {
     <div>
       <div style={{ opacity: 0.7, fontSize: 12, margin: '4px 0' }}>添加元素</div>
       <Space direction="vertical" style={{ width: '100%' }}>
-        <Button block onClick={addText}>文本框</Button>
+        <Button block onClick={() => addText('horizontal')}>横排文本框</Button>
+        <Button block onClick={() => addText('vertical')}>竖排文本框</Button>
         <div style={{ opacity: 0.55, fontSize: 12, margin: '6px 0' }}>
           文本中用 {'{{参数名称}}'} 引用参数
         </div>
